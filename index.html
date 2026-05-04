@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Surfwind Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+  <div class="header-logo">
+    🌊 <span>Surfwind</span>
+    <span class="header-sub">Historische Windanalyse · 20 Kitesurf-Spots</span>
+  </div>
+  <a class="header-link" href="spot.html">alle Spots →</a>
+</header>
+
+<div class="section-header">
+  <span class="section-title">Jetzt (Live)</span>
+  <span class="section-meta" id="live-timestamp"></span>
+</div>
+
+<div class="live-grid" id="live-grid"></div>
+
+<div class="section-header">
+  <span class="section-title">Statistisch gut in dieser Woche (historisch)</span>
+  <span class="section-meta" id="week-meta"></span>
+</div>
+
+<div class="stat-bar-container" id="stat-bars">
+  <div class="stat-bar-row" style="color:var(--text-muted);font-size:0.82rem;">Lade historische Daten…</div>
+</div>
+
+<script src="app.js"></script>
+<script src="index.js"></script>
+</body>
+</html>
