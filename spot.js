@@ -280,6 +280,25 @@ function isLeapYear(y) {
   return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
 }
 
+// ── Good-range canvas plugin ──────────────────────────────────────────────────
+
+const goodRangePlugin = {
+  id: 'goodRangePlugin',
+  beforeDatasetsDraw(chart) {
+    const ranges = chart._goodRanges;
+    if (!ranges || ranges.length === 0) return;
+    const { ctx, chartArea: { top, bottom }, scales: { x: xScale } } = chart;
+    ctx.save();
+    ctx.fillStyle = 'rgba(46,125,50,0.28)';
+    for (const { xMin, xMax } of ranges) {
+      const x1 = xScale.getPixelForValue(xMin - 1);
+      const x2 = xScale.getPixelForValue(xMax - 1);
+      ctx.fillRect(x1, top, x2 - x1, bottom - top);
+    }
+    ctx.restore();
+  },
+};
+
 // ── Main chart ────────────────────────────────────────────────────────────────
 
 function buildChart(spot, arr2025) {
@@ -351,6 +370,7 @@ function buildChart(spot, arr2025) {
 
   activeChart = new Chart(canvas.getContext('2d'), {
     type: 'line',
+    plugins: [goodRangePlugin],
     data: {
       labels: Array.from({ length: 365 }, (_, i) => i + 1),
       datasets,
@@ -440,13 +460,13 @@ function buildChart(spot, arr2025) {
                 font: { size: 10 },
               },
             },
-            ...computeGoodRanges(datasets),
           },
         },
       },
     },
   });
 
+  activeChart._goodRanges = computeGoodRanges(datasets);
   renderLegend(datasets);
 }
 
@@ -471,14 +491,17 @@ function toggleDataset(index, pill) {
   const meta = activeChart.getDatasetMeta(index);
   meta.hidden = !meta.hidden;
   pill.classList.toggle('hidden', meta.hidden);
+  const visible = activeChart.data.datasets.filter(
+    (_, i) => !activeChart.getDatasetMeta(i).hidden
+  );
+  activeChart._goodRanges = computeGoodRanges(visible);
   activeChart.draw(); // re-render only — no update cycle, zoom state preserved
 }
 
 function computeGoodRanges(datasets) {
-  const goodRanges = {};
-  if (datasets.length === 0) return goodRanges;
+  const ranges = [];
+  if (datasets.length === 0) return ranges;
   let rangeStart = null;
-  let idx = 0;
   for (let i = 0; i < 365; i++) {
     const dayLabel = i + 1;
     const allInWindow = datasets.every(ds => {
@@ -489,27 +512,13 @@ function computeGoodRanges(datasets) {
       if (rangeStart === null) rangeStart = dayLabel;
     } else {
       if (rangeStart !== null) {
-        goodRanges[`goodRange_${idx++}`] = makeGoodRangeAnnotation(rangeStart, dayLabel - 1);
+        ranges.push({ xMin: rangeStart, xMax: dayLabel - 1 });
         rangeStart = null;
       }
     }
   }
-  if (rangeStart !== null) {
-    goodRanges[`goodRange_${idx}`] = makeGoodRangeAnnotation(rangeStart, 365);
-  }
-  return goodRanges;
-}
-
-
-function makeGoodRangeAnnotation(xMin, xMax) {
-  return {
-    type: 'box',
-    xMin,
-    xMax,
-    backgroundColor: 'rgba(46,125,50,0.28)',
-    borderWidth: 0,
-    drawTime: 'beforeDatasetsDraw',
-  };
+  if (rangeStart !== null) ranges.push({ xMin: rangeStart, xMax: 365 });
+  return ranges;
 }
 
 function showResetBtn() {
