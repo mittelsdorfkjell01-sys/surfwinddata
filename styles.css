@@ -469,6 +469,7 @@ header {
   overflow: hidden;
   border: 1px solid var(--border);
   z-index: 0;
+  height: 100%;
 }
 
 /* ── Responsive ── */

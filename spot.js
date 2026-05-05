@@ -1,6 +1,7 @@
 let historyData = null;
 let activeChart = null;
 let activeMap = null;
+let mapInitTimer = null;
 let currentSpotId = null;
 
 const CHART_YEARS = ['2020', '2021', '2022', '2023', '2024'];
@@ -439,6 +440,7 @@ function buildChart(spot, arr2025) {
                 font: { size: 10 },
               },
             },
+            ...computeGoodRanges(datasets),
           },
         },
       },
@@ -446,7 +448,6 @@ function buildChart(spot, arr2025) {
   });
 
   renderLegend(datasets);
-  updateGoodRangeAnnotations();
 }
 
 function renderLegend(datasets) {
@@ -473,48 +474,43 @@ function toggleDataset(index, pill) {
   updateGoodRangeAnnotations();
 }
 
+function computeGoodRanges(datasets) {
+  const goodRanges = {};
+  if (datasets.length === 0) return goodRanges;
+  let rangeStart = null;
+  let idx = 0;
+  for (let i = 0; i < 365; i++) {
+    const dayLabel = i + 1;
+    const allInWindow = datasets.every(ds => {
+      const v = ds.data[i];
+      return v !== null && v !== undefined && !isNaN(v) && v >= KITE_MIN && v <= KITE_MAX;
+    });
+    if (allInWindow) {
+      if (rangeStart === null) rangeStart = dayLabel;
+    } else {
+      if (rangeStart !== null) {
+        goodRanges[`goodRange_${idx++}`] = makeGoodRangeAnnotation(rangeStart, dayLabel - 1);
+        rangeStart = null;
+      }
+    }
+  }
+  if (rangeStart !== null) {
+    goodRanges[`goodRange_${idx}`] = makeGoodRangeAnnotation(rangeStart, 365);
+  }
+  return goodRanges;
+}
+
 function updateGoodRangeAnnotations() {
   if (!activeChart) return;
-
   const existing = activeChart.options.plugins.annotation.annotations;
-  const goodRanges = {};
-
   const visibleDatasets = activeChart.data.datasets.filter(
     (_, i) => !activeChart.getDatasetMeta(i).hidden
   );
-
-  if (visibleDatasets.length > 0) {
-    let rangeStart = null;
-    let idx = 0;
-
-    for (let i = 0; i < 365; i++) {
-      const dayLabel = i + 1;
-      const allInWindow = visibleDatasets.every(ds => {
-        const v = ds.data[i];
-        return v !== null && v !== undefined && !isNaN(v) && v >= KITE_MIN && v <= KITE_MAX;
-      });
-
-      if (allInWindow) {
-        if (rangeStart === null) rangeStart = dayLabel;
-      } else {
-        if (rangeStart !== null) {
-          goodRanges[`goodRange_${idx++}`] = makeGoodRangeAnnotation(rangeStart, dayLabel - 1);
-          rangeStart = null;
-        }
-      }
-    }
-    if (rangeStart !== null) {
-      goodRanges[`goodRange_${idx}`] = makeGoodRangeAnnotation(rangeStart, 365);
-    }
-  }
-
-  // Replace the annotations object entirely so chartjs-plugin-annotation picks up changes
   activeChart.options.plugins.annotation.annotations = {
     kiteZone: existing.kiteZone,
     today: existing.today,
-    ...goodRanges,
+    ...computeGoodRanges(visibleDatasets),
   };
-
   activeChart.update('none');
 }
 
@@ -546,17 +542,23 @@ function buildMap(spot) {
   const container = document.getElementById('spot-map');
   if (!container) return;
 
-  activeMap = L.map(container, { zoomControl: true }).setView([spot.lat, spot.lon], 10);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    maxZoom: 18,
-  }).addTo(activeMap);
-  L.marker([spot.lat, spot.lon]).addTo(activeMap).bindPopup(spot.name).openPopup();
+  // Defer init so grid layout is computed before Leaflet reads container size
+  mapInitTimer = setTimeout(() => {
+    mapInitTimer = null;
+    activeMap = L.map(container, { zoomControl: true }).setView([spot.lat, spot.lon], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 18,
+    }).addTo(activeMap);
+    L.marker([spot.lat, spot.lon]).addTo(activeMap).bindPopup(spot.name).openPopup();
+    activeMap.invalidateSize();
+  }, 0);
 }
 
 // ── Cleanup ───────────────────────────────────────────────────────────────────
 
 function destroyCharts() {
+  if (mapInitTimer) { clearTimeout(mapInitTimer); mapInitTimer = null; }
   if (activeChart) { activeChart.destroy(); activeChart = null; }
   if (activeMap) { activeMap.remove(); activeMap = null; }
 }
