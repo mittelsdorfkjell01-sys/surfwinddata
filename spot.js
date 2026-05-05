@@ -378,7 +378,7 @@ function buildChart(spot, arr2025) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: false,
+      animation: { duration: 0 },
       spanGaps: false,
       elements: {
         point: { radius: 0, hoverRadius: 4 },
@@ -495,7 +495,7 @@ function toggleDataset(index, pill) {
     (_, i) => !activeChart.getDatasetMeta(i).hidden
   );
   activeChart._goodRanges = computeGoodRanges(visible);
-  activeChart.draw(); // re-render only — no update cycle, zoom state preserved
+  activeChart.update({ duration: 0 });
 }
 
 function computeGoodRanges(datasets) {
