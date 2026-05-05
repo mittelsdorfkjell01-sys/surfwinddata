@@ -258,13 +258,17 @@ header {
 /* ── Spot header ── */
 .spot-header {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
 
-.spot-title-group {}
+.spot-title-group {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
 
 .spot-name {
   font-size: 2rem;
@@ -275,77 +279,72 @@ header {
 .spot-country {
   font-size: 0.85rem;
   color: var(--text-muted);
-  margin-top: 0.15rem;
 }
 
 .live-overlay {
   width: 50%;
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(30, 30, 30, 0.78);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255,255,255,0.1);
   border-radius: 10px;
-  padding: 0.9rem 1.2rem;
+  padding: 0.85rem 1.1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  justify-content: space-between;
+  gap: 0.3rem;
 }
 
 .live-overlay-live {
-  font-size: 0.82rem;
+  font-size: 0.75rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--green);
+  color: #66bb6a;
 }
-.live-overlay-live.border  { color: var(--yellow); }
-.live-overlay-live.no      { color: var(--text-muted); }
-.live-overlay-live.unknown { color: var(--text-muted); }
+.live-overlay-live.border  { color: #ffca28; }
+.live-overlay-live.no      { color: rgba(255,255,255,0.4); }
+.live-overlay-live.unknown { color: rgba(255,255,255,0.4); }
 
-.live-overlay-speed {
-  font-size: 1.9rem;
-  font-weight: 700;
-  line-height: 1.15;
-  color: var(--text);
-}
-
-.live-overlay-wind {
-  font-size: 1rem;
-  color: var(--text);
+.live-overlay-main {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.75rem;
+  flex: 1;
 }
 
-.live-overlay-arrow {
-  display: inline-block;
-  font-size: 1.1rem;
+.live-overlay-speed {
+  font-size: 2rem;
+  font-weight: 700;
   line-height: 1;
-  transition: transform 0.4s ease;
+  color: #fff;
+  white-space: nowrap;
 }
 
-.live-overlay-status {
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  margin-top: 0.15rem;
+.live-overlay-compass-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
 }
-.live-overlay-status.kite   { color: var(--green); }
-.live-overlay-status.border { color: var(--yellow); }
-.live-overlay-status.no     { color: var(--text-muted); }
+
+.live-overlay-cardinal {
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.6);
+  white-space: nowrap;
+}
 
 .live-overlay-time {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  margin-top: 0.1rem;
+  font-size: 0.68rem;
+  color: rgba(255,255,255,0.38);
 }
 
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 
 /* ── Chart container ── */
 .chart-container {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: rgba(30, 30, 30, 0.78);
+  border: 1px solid rgba(255,255,255,0.1);
   border-radius: 8px;
   padding: 1rem 1.5rem 1.5rem;
   position: relative;
@@ -361,7 +360,7 @@ header {
 
 .chart-hint {
   font-size: 0.72rem;
-  color: var(--text-muted);
+  color: rgba(255,255,255,0.4);
   margin-bottom: 0.5rem;
 }
 
@@ -382,21 +381,21 @@ header {
 
 .legend-hint {
   font-size: 0.7rem;
-  color: var(--text-muted);
+  color: rgba(255,255,255,0.4);
 }
 
 .zoom-reset-btn {
   font-size: 0.75rem;
   font-family: var(--font);
   padding: 0.25rem 0.75rem;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255,255,255,0.2);
   border-radius: 4px;
-  background: var(--surface);
-  color: var(--text-muted);
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.55);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.zoom-reset-btn:hover { background: var(--bg); color: var(--text); }
+.zoom-reset-btn:hover { background: rgba(255,255,255,0.16); color: #fff; }
 
 /* ── Chart legend ── */
 .chart-legend {
@@ -411,14 +410,15 @@ header {
   gap: 0.4rem;
   padding: 0.2rem 0.6rem;
   border-radius: 100px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255,255,255,0.18);
   font-size: 0.75rem;
   cursor: pointer;
   user-select: none;
-  background: var(--surface);
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.8);
   transition: opacity 0.2s;
 }
-.legend-pill.hidden { opacity: 0.35; }
+.legend-pill.hidden { opacity: 0.3; }
 
 .legend-line {
   width: 18px;
@@ -561,6 +561,7 @@ header {
 
   .spot-header {
     flex-direction: column;
+    align-items: stretch;
     gap: 0.75rem;
   }
 
@@ -570,5 +571,9 @@ header {
 
   .spot-name {
     font-size: 1.5rem;
+  }
+
+  .live-overlay-speed {
+    font-size: 1.6rem;
   }
 }

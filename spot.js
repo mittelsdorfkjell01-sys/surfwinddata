@@ -126,12 +126,13 @@ function renderMainSkeleton(spot) {
       </div>
       <div class="live-overlay" id="live-overlay">
         <div class="live-overlay-live" id="live-overlay-live">Live</div>
-        <div class="live-overlay-speed" id="live-overlay-speed">– kts</div>
-        <div class="live-overlay-wind" id="live-overlay-wind">
-          <span class="live-overlay-arrow" id="live-overlay-arrow">↑</span>
-          <span id="live-overlay-dir">–</span>
+        <div class="live-overlay-main">
+          <span class="live-overlay-speed" id="live-overlay-speed">– kts</span>
+          <div class="live-overlay-compass-wrap">
+            <div id="live-overlay-compass"></div>
+            <span class="live-overlay-cardinal" id="live-overlay-cardinal">–</span>
+          </div>
         </div>
-        <div class="live-overlay-status" id="live-overlay-status">Wird geladen…</div>
         <div class="live-overlay-time" id="live-overlay-time"></div>
       </div>
     </div>
@@ -169,37 +170,44 @@ function degToCardinal(deg) {
   return dirs[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
 }
 
+function buildCompassSVG(dir) {
+  const angle = dir !== null ? dir : 0;
+  const op = dir !== null ? 1 : 0.3;
+  return `<svg viewBox="0 0 48 48" width="48" height="48" style="opacity:${op}">
+    <circle cx="24" cy="24" r="21" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1.5"/>
+    <text x="24" y="9.5" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="7" font-family="Inter,sans-serif" font-weight="600">N</text>
+    <circle cx="24" cy="40" r="1.3" fill="rgba(255,255,255,0.3)"/>
+    <circle cx="40" cy="24" r="1.3" fill="rgba(255,255,255,0.3)"/>
+    <circle cx="8"  cy="24" r="1.3" fill="rgba(255,255,255,0.3)"/>
+    <g transform="rotate(${angle},24,24)">
+      <polygon points="24,5 21,24 24,21.5 27,24" fill="white"/>
+      <polygon points="24,43 21,24 24,26.5 27,24" fill="rgba(255,255,255,0.22)"/>
+    </g>
+    <circle cx="24" cy="24" r="2.2" fill="white"/>
+  </svg>`;
+}
+
 function updateLiveOverlay(data) {
-  const overlay = document.getElementById('live-overlay');
-  const liveLabel = document.getElementById('live-overlay-live');
-  const speedEl = document.getElementById('live-overlay-speed');
-  const arrowEl = document.getElementById('live-overlay-arrow');
-  const dirEl = document.getElementById('live-overlay-dir');
-  const statusEl = document.getElementById('live-overlay-status');
-  const timeEl = document.getElementById('live-overlay-time');
+  const overlay     = document.getElementById('live-overlay');
+  const liveLabel   = document.getElementById('live-overlay-live');
+  const speedEl     = document.getElementById('live-overlay-speed');
+  const compassEl   = document.getElementById('live-overlay-compass');
+  const cardinalEl  = document.getElementById('live-overlay-cardinal');
+  const timeEl      = document.getElementById('live-overlay-time');
   if (!overlay) return;
 
   if (!data) {
     liveLabel.className = 'live-overlay-live unknown';
     speedEl.textContent = '– kts';
-    arrowEl.style.transform = '';
-    dirEl.textContent = '–';
-    statusEl.textContent = 'Keine Verbindung';
+    compassEl.innerHTML = buildCompassSVG(null);
+    cardinalEl.textContent = '–';
   } else {
     const { kts, dir } = data;
     const status = windStatus(kts);
     liveLabel.className = `live-overlay-live ${status}`;
     speedEl.textContent = `${kts.toFixed(1)} kts`;
-    if (dir !== null) {
-      arrowEl.style.transform = `rotate(${dir}deg)`;
-      dirEl.textContent = `${degToCardinal(dir)} (${Math.round(dir)}°)`;
-    } else {
-      arrowEl.style.transform = '';
-      dirEl.textContent = '–';
-    }
-    const statusLabel = status === 'kite' ? 'Kite-Fenster' : status === 'border' ? 'Grenzwertig' : 'Kein Wind';
-    statusEl.textContent = statusLabel;
-    statusEl.className = `live-overlay-status ${status}`;
+    compassEl.innerHTML = buildCompassSVG(dir);
+    cardinalEl.textContent = dir !== null ? `${degToCardinal(dir)} ${Math.round(dir)}°` : '–';
   }
   if (timeEl) timeEl.textContent = `Aktualisiert: ${formatTime(new Date())} Uhr`;
 }
@@ -333,7 +341,7 @@ function buildChart(spot, arr2025) {
     const canvas = document.getElementById('main-chart');
     if (canvas) {
       const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#757575';
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
       ctx.font = '14px Inter, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('Historische Daten nicht verfügbar. Bitte fetch_history.py ausführen.', canvas.width / 2, 60);
@@ -419,14 +427,18 @@ function buildChart(spot, arr2025) {
             callback: (val, idx) => X_LABELS[idx] || null,
             autoSkip: false,
             maxRotation: 0,
+            color: 'rgba(255,255,255,0.6)',
           },
-          grid: { color: 'rgba(0,0,0,0.05)' },
+          grid: { color: 'rgba(255,255,255,0.07)' },
+          border: { color: 'rgba(255,255,255,0.15)' },
         },
         y: {
           min: 0,
           max: 40,
-          title: { display: true, text: 'Tages-Max 09–19 Uhr (kts)', color: '#757575', font: { size: 11 } },
-          grid: { color: 'rgba(0,0,0,0.07)' },
+          title: { display: true, text: 'Tages-Max 09–19 Uhr (kts)', color: 'rgba(255,255,255,0.45)', font: { size: 11 } },
+          ticks: { color: 'rgba(255,255,255,0.6)' },
+          grid: { color: 'rgba(255,255,255,0.07)' },
+          border: { color: 'rgba(255,255,255,0.15)' },
         },
       },
       plugins: {
@@ -461,14 +473,14 @@ function buildChart(spot, arr2025) {
               type: 'box',
               yMin: 16,
               yMax: 30,
-              backgroundColor: 'rgba(76,175,80,0.07)',
-              borderColor: 'rgba(76,175,80,0.25)',
+              backgroundColor: 'rgba(76,175,80,0.1)',
+              borderColor: 'rgba(76,175,80,0.35)',
               borderWidth: 1,
               label: {
                 content: '⬆ Kite-Fenster 16–30 kts',
                 display: true,
                 position: { x: 'start', y: 'end' },
-                color: 'rgba(76,175,80,0.6)',
+                color: 'rgba(144,238,144,0.75)',
                 font: { size: 10 },
               },
             },
@@ -476,14 +488,14 @@ function buildChart(spot, arr2025) {
               type: 'line',
               xMin: currentDayOfYear,
               xMax: currentDayOfYear,
-              borderColor: 'rgba(239,83,80,0.5)',
+              borderColor: 'rgba(239,83,80,0.7)',
               borderWidth: 1,
               borderDash: [4, 4],
               label: {
                 content: 'Heute',
                 display: true,
                 position: 'start',
-                color: 'rgba(239,83,80,0.7)',
+                color: 'rgba(255,120,120,0.85)',
                 font: { size: 10 },
               },
             },
