@@ -515,7 +515,7 @@ function updateGoodRangeAnnotations() {
     ...goodRanges,
   };
 
-  activeChart.update();
+  activeChart.update('none');
 }
 
 function makeGoodRangeAnnotation(xMin, xMax) {
