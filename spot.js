@@ -288,11 +288,13 @@ const goodRangePlugin = {
     const ranges = chart._goodRanges;
     if (!ranges || ranges.length === 0) return;
     const { ctx, chartArea: { top, bottom }, scales: { x: xScale } } = chart;
+    // Half category width so rectangles cover full day, not just center-to-center
+    const halfCatW = (xScale.getPixelForValue(2) - xScale.getPixelForValue(1)) / 2;
     ctx.save();
     ctx.fillStyle = 'rgba(27,94,32,0.38)';
     for (const { xMin, xMax } of ranges) {
-      const x1 = xScale.getPixelForValue(xMin - 1);
-      const x2 = xScale.getPixelForValue(xMax - 1);
+      const x1 = xScale.getPixelForValue(xMin) - halfCatW;
+      const x2 = xScale.getPixelForValue(xMax) + halfCatW;
       ctx.fillRect(x1, top, x2 - x1, bottom - top);
     }
     ctx.restore();
@@ -466,7 +468,7 @@ function buildChart(spot, arr2025) {
     },
   });
 
-  activeChart._goodRanges = computeGoodRanges(datasets);
+  activeChart._goodRanges = computeGoodRanges(datasets.filter(ds => ds.label !== 'Ø 2004–24'));
   renderLegend(datasets);
 }
 
@@ -492,7 +494,7 @@ function toggleDataset(index, pill) {
   meta.hidden = !meta.hidden;
   pill.classList.toggle('hidden', meta.hidden);
   const visible = activeChart.data.datasets.filter(
-    (_, i) => !activeChart.getDatasetMeta(i).hidden
+    (ds, i) => ds.label !== 'Ø 2004–24' && !activeChart.getDatasetMeta(i).hidden
   );
   activeChart._goodRanges = computeGoodRanges(visible);
   activeChart.update({ duration: 0 });
