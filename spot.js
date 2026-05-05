@@ -173,17 +173,17 @@ function degToCardinal(deg) {
 function buildCompassSVG(dir) {
   const angle = dir !== null ? dir : 0;
   const op = dir !== null ? 1 : 0.3;
-  return `<svg viewBox="0 0 48 48" width="48" height="48" style="opacity:${op}">
-    <circle cx="24" cy="24" r="21" fill="none" stroke="rgba(0,0,0,0.18)" stroke-width="1.5"/>
-    <text x="24" y="9.5" text-anchor="middle" fill="rgba(0,0,0,0.55)" font-size="7" font-family="Inter,sans-serif" font-weight="600">N</text>
-    <circle cx="24" cy="40" r="1.3" fill="rgba(0,0,0,0.25)"/>
-    <circle cx="40" cy="24" r="1.3" fill="rgba(0,0,0,0.25)"/>
-    <circle cx="8"  cy="24" r="1.3" fill="rgba(0,0,0,0.25)"/>
+  return `<svg viewBox="0 0 48 48" width="44" height="44" style="opacity:${op}">
+    <circle cx="24" cy="24" r="21" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+    <text x="24" y="9.5" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="7" font-family="Space Mono,monospace" font-weight="700">N</text>
+    <circle cx="24" cy="40" r="1.3" fill="rgba(255,255,255,0.2)"/>
+    <circle cx="40" cy="24" r="1.3" fill="rgba(255,255,255,0.2)"/>
+    <circle cx="8"  cy="24" r="1.3" fill="rgba(255,255,255,0.2)"/>
     <g transform="rotate(${angle},24,24)">
-      <polygon points="24,5 21,24 24,21.5 27,24" fill="#212121"/>
-      <polygon points="24,43 21,24 24,26.5 27,24" fill="rgba(0,0,0,0.18)"/>
+      <polygon points="24,5 21,24 24,21.5 27,24" fill="#3aaee8"/>
+      <polygon points="24,43 21,24 24,26.5 27,24" fill="rgba(255,255,255,0.2)"/>
     </g>
-    <circle cx="24" cy="24" r="2.2" fill="#212121"/>
+    <circle cx="24" cy="24" r="2.2" fill="#ffffff"/>
   </svg>`;
 }
 
@@ -324,7 +324,7 @@ const goodRangePlugin = {
     // Half category width so rectangles cover full day, not just center-to-center
     const halfCatW = (xScale.getPixelForValue(2) - xScale.getPixelForValue(1)) / 2;
     ctx.save();
-    ctx.fillStyle = 'rgba(27,94,32,0.38)';
+    ctx.fillStyle = 'rgba(13,179,116,0.11)';
     for (const { xMin, xMax } of ranges) {
       const x1 = xScale.getPixelForValue(xMin) - halfCatW;
       const x2 = xScale.getPixelForValue(xMax) + halfCatW;
@@ -403,6 +403,9 @@ function buildChart(spot, arr2025) {
     activeChart = null;
   }
 
+  Chart.defaults.font.family = "'Source Sans 3', sans-serif";
+  Chart.defaults.color = '#6b8da8';
+
   activeChart = new Chart(canvas.getContext('2d'), {
     type: 'line',
     plugins: [goodRangePlugin],
@@ -469,14 +472,14 @@ function buildChart(spot, arr2025) {
               type: 'box',
               yMin: 16,
               yMax: 30,
-              backgroundColor: 'rgba(76,175,80,0.07)',
-              borderColor: 'rgba(76,175,80,0.25)',
+              backgroundColor: 'rgba(13,179,116,0.06)',
+              borderColor: 'rgba(13,179,116,0.2)',
               borderWidth: 1,
               label: {
                 content: '⬆ Kite-Fenster 16–30 kts',
                 display: true,
                 position: { x: 'start', y: 'end' },
-                color: 'rgba(76,175,80,0.6)',
+                color: 'rgba(13,179,116,0.6)',
                 font: { size: 10 },
               },
             },

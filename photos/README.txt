@@ -1,26 +1,26 @@
 Spot-Fotos – Namenskonvention: {spot.id}.jpg
 
 Verfügbare IDs:
-  laboe.jpg
-  gold_fehmarn.jpg
-  hvide_sande.jpg
-  st_peter_ording.jpg
-  is_solinas.jpg
-  la_cinta.jpg
-  les_capitelles.jpg
-  taghazout.jpg
-  tarifa.jpg
-  leucate.jpg
-  praia_guincho.jpg
-  sotavento.jpg
-  brouwersdam.jpg
-  pounda_paros.jpg
-  lo_stagnone.jpg
-  ringkobing.jpg
-  valdevaqueros.jpg
-  obidos.jpg
-  gokova.jpg
-  akyaka.jpg
+  laboe.webp
+  gold_fehmarn.webp
+  hvide_sande.webp
+  st_peter_ording.webp
+  is_solinas.webp
+  la_cinta.webp
+  les_capitelles.webp
+  taghazout.webp
+  tarifa.webp
+  leucate.webp
+  praia_guincho.webp
+  sotavento.webp
+  brouwersdam.webp
+  pounda_paros.webp
+  lo_stagnone.webp
+  ringkobing.webp
+  valdevaqueros.webp
+  obidos.webp
+  gokova.webp
+  akyaka.webp
 
 Formate: .jpg, .png oder .webp – einfach umbenennen falls nötig.
 Fehlende Fotos werden automatisch durch ein Platzhalterbild ersetzt.
