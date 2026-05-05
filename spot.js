@@ -405,7 +405,7 @@ function buildChart(spot, arr2025) {
             onPanComplete: () => showResetBtn(),
           },
           limits: {
-            x: { minRange: 14 },
+            x: { min: 0, max: 364, minRange: 14 },
           },
         },
         annotation: {
@@ -471,7 +471,8 @@ function toggleDataset(index, pill) {
   const meta = activeChart.getDatasetMeta(index);
   meta.hidden = !meta.hidden;
   pill.classList.toggle('hidden', meta.hidden);
-  updateGoodRangeAnnotations();
+  updateGoodRangeAnnotations(); // mutates annotations
+  activeChart.update('none');   // single re-render: visibility + annotations together
 }
 
 function computeGoodRanges(datasets) {
@@ -511,7 +512,7 @@ function updateGoodRangeAnnotations() {
     today: existing.today,
     ...computeGoodRanges(visibleDatasets),
   };
-  activeChart.update('none');
+  // No chart.update() here — caller is responsible
 }
 
 function makeGoodRangeAnnotation(xMin, xMax) {
