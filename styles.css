@@ -283,7 +283,7 @@ header {
 
 .live-overlay {
   width: 50%;
-  background: rgba(30, 30, 30, 0.78);
+  background: rgba(30, 30, 30, 0.5);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   border: 1px solid rgba(255,255,255,0.1);
@@ -343,7 +343,7 @@ header {
 
 /* ── Chart container ── */
 .chart-container {
-  background: rgba(30, 30, 30, 0.78);
+  background: rgba(30, 30, 30, 0.5);
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 8px;
   padding: 1rem 1.5rem 1.5rem;
