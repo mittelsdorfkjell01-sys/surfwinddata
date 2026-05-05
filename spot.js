@@ -104,8 +104,8 @@ async function loadSpot(id) {
     fetch2025(spot),
   ]);
 
-  const kts = liveKts.status === 'fulfilled' ? liveKts.value : null;
-  updateLiveChip(kts);
+  const liveData = liveKts.status === 'fulfilled' ? liveKts.value : null;
+  updateLiveOverlay(liveData);
 
   const arr2025 = data2025.status === 'fulfilled' ? data2025.value : null;
   buildChart(spot, arr2025);
@@ -124,12 +124,15 @@ function renderMainSkeleton(spot) {
         <div class="spot-name">${spot.name}</div>
         <div class="spot-country">${spot.country}</div>
       </div>
-      <div>
-        <div class="live-chip unknown" id="live-chip">
-          <span class="live-chip-dot"></span>
-          <span id="live-chip-text">Live wird geladen…</span>
+      <div class="live-overlay" id="live-overlay">
+        <div class="live-overlay-live" id="live-overlay-live">Live</div>
+        <div class="live-overlay-speed" id="live-overlay-speed">– kts</div>
+        <div class="live-overlay-wind" id="live-overlay-wind">
+          <span class="live-overlay-arrow" id="live-overlay-arrow">↑</span>
+          <span id="live-overlay-dir">–</span>
         </div>
-        <div class="live-updated" id="live-updated"></div>
+        <div class="live-overlay-status" id="live-overlay-status">Wird geladen…</div>
+        <div class="live-overlay-time" id="live-overlay-time"></div>
       </div>
     </div>
 
@@ -161,22 +164,44 @@ function renderMainSkeleton(spot) {
   `;
 }
 
-function updateLiveChip(kts) {
-  const chip = document.getElementById('live-chip');
-  const chipText = document.getElementById('live-chip-text');
-  const updated = document.getElementById('live-updated');
-  if (!chip) return;
+function degToCardinal(deg) {
+  const dirs = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
+  return dirs[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
+}
 
-  if (kts === null) {
-    chip.className = 'live-chip unknown';
-    chipText.textContent = 'Live: – kts · Keine Verbindung';
+function updateLiveOverlay(data) {
+  const overlay = document.getElementById('live-overlay');
+  const liveLabel = document.getElementById('live-overlay-live');
+  const speedEl = document.getElementById('live-overlay-speed');
+  const arrowEl = document.getElementById('live-overlay-arrow');
+  const dirEl = document.getElementById('live-overlay-dir');
+  const statusEl = document.getElementById('live-overlay-status');
+  const timeEl = document.getElementById('live-overlay-time');
+  if (!overlay) return;
+
+  if (!data) {
+    liveLabel.className = 'live-overlay-live unknown';
+    speedEl.textContent = '– kts';
+    arrowEl.style.transform = '';
+    dirEl.textContent = '–';
+    statusEl.textContent = 'Keine Verbindung';
   } else {
+    const { kts, dir } = data;
     const status = windStatus(kts);
-    chip.className = `live-chip ${status}`;
-    const label = status === 'kite' ? 'Kite-Fenster' : status === 'border' ? 'Grenzwertig' : 'Kein Wind';
-    chipText.textContent = `Live: ${kts.toFixed(1)} kts — ${label}`;
+    liveLabel.className = `live-overlay-live ${status}`;
+    speedEl.textContent = `${kts.toFixed(1)} kts`;
+    if (dir !== null) {
+      arrowEl.style.transform = `rotate(${dir}deg)`;
+      dirEl.textContent = `${degToCardinal(dir)} (${Math.round(dir)}°)`;
+    } else {
+      arrowEl.style.transform = '';
+      dirEl.textContent = '–';
+    }
+    const statusLabel = status === 'kite' ? 'Kite-Fenster' : status === 'border' ? 'Grenzwertig' : 'Kein Wind';
+    statusEl.textContent = statusLabel;
+    statusEl.className = `live-overlay-status ${status}`;
   }
-  if (updated) updated.textContent = `Zuletzt aktualisiert: ${formatTime(new Date())} Uhr`;
+  if (timeEl) timeEl.textContent = `Aktualisiert: ${formatTime(new Date())} Uhr`;
 }
 
 // ── 2025 fetch ────────────────────────────────────────────────────────────────

@@ -118,12 +118,12 @@ async function fetchWithTimeout(url, timeoutMs = FETCH_TIMEOUT) {
 async function fetchLiveWind(spot) {
   const url = `https://api.open-meteo.com/v1/forecast`
     + `?latitude=${spot.lat}&longitude=${spot.lon}`
-    + `&current=windspeed_10m&wind_speed_unit=kmh`;
+    + `&current=windspeed_10m,winddirection_10m&wind_speed_unit=kmh`;
   const res = await fetchWithTimeout(url);
   const data = await res.json();
   const kmh = data?.current?.windspeed_10m;
   if (kmh == null) return null;
-  return kmhToKts(kmh);
+  return { kts: kmhToKts(kmh), dir: data?.current?.winddirection_10m ?? null };
 }
 
 function formatTime(date) {
