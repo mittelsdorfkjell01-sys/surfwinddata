@@ -289,7 +289,7 @@ const goodRangePlugin = {
     if (!ranges || ranges.length === 0) return;
     const { ctx, chartArea: { top, bottom }, scales: { x: xScale } } = chart;
     ctx.save();
-    ctx.fillStyle = 'rgba(46,125,50,0.28)';
+    ctx.fillStyle = 'rgba(27,94,32,0.38)';
     for (const { xMin, xMax } of ranges) {
       const x1 = xScale.getPixelForValue(xMin - 1);
       const x2 = xScale.getPixelForValue(xMax - 1);
