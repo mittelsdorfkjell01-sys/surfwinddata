@@ -447,7 +447,7 @@ header {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
-  height: 280px;
+  height: 420px;
 }
 
 .spot-photo-wrap {
@@ -516,7 +516,7 @@ header {
   }
 
   .spot-photo-wrap,
-  .spot-map { height: 220px; }
+  .spot-map { height: 260px; }
 
   .header-sub { display: none; }
 

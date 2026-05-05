@@ -261,8 +261,10 @@ function hourlyMapTo365Array(hourlyMap, today) {
     raw[doy - 1] = parseFloat(Math.max(...values).toFixed(1));
   }
 
-  // Zero out future days
-  for (let i = todayDoy; i < 365; i++) raw[i] = null;
+  // Zero out future days only while we're still in 2025
+  if (today.getFullYear() === 2025) {
+    for (let i = todayDoy; i < 365; i++) raw[i] = null;
+  }
 
   return raw;
 }
@@ -474,12 +476,8 @@ function toggleDataset(index, pill) {
 function updateGoodRangeAnnotations() {
   if (!activeChart) return;
 
-  const annotations = activeChart.options.plugins.annotation.annotations;
-
-  // Remove previous good-range boxes
-  Object.keys(annotations).forEach(k => {
-    if (k.startsWith('goodRange_')) delete annotations[k];
-  });
+  const existing = activeChart.options.plugins.annotation.annotations;
+  const goodRanges = {};
 
   const visibleDatasets = activeChart.data.datasets.filter(
     (_, i) => !activeChart.getDatasetMeta(i).hidden
@@ -500,17 +498,24 @@ function updateGoodRangeAnnotations() {
         if (rangeStart === null) rangeStart = dayLabel;
       } else {
         if (rangeStart !== null) {
-          annotations[`goodRange_${idx++}`] = makeGoodRangeAnnotation(rangeStart, dayLabel - 1);
+          goodRanges[`goodRange_${idx++}`] = makeGoodRangeAnnotation(rangeStart, dayLabel - 1);
           rangeStart = null;
         }
       }
     }
     if (rangeStart !== null) {
-      annotations[`goodRange_${idx}`] = makeGoodRangeAnnotation(rangeStart, 365);
+      goodRanges[`goodRange_${idx}`] = makeGoodRangeAnnotation(rangeStart, 365);
     }
   }
 
-  activeChart.update('none');
+  // Replace the annotations object entirely so chartjs-plugin-annotation picks up changes
+  activeChart.options.plugins.annotation.annotations = {
+    kiteZone: existing.kiteZone,
+    today: existing.today,
+    ...goodRanges,
+  };
+
+  activeChart.update();
 }
 
 function makeGoodRangeAnnotation(xMin, xMax) {
