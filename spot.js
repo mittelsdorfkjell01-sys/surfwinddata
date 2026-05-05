@@ -155,7 +155,7 @@ function renderMainSkeleton(spot) {
       <div class="spot-media">
         <div class="spot-photo-wrap">
           <img class="spot-photo-img"
-               src="photos/${spot.id}.jpg"
+               src="photos/${spot.id}.webp"
                alt="${spot.name}"
                onerror="this.onerror=null;this.src='https://picsum.photos/seed/${spot.id}/800/450'">
         </div>
