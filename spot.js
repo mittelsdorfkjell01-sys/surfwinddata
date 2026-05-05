@@ -542,7 +542,7 @@ function computeGoodRanges(datasets) {
     const values = datasets
       .map(ds => ds.data[i])
       .filter(v => v !== null && v !== undefined && !isNaN(v));
-    const inWindow = values.length > 0 && values.every(v => v >= KITE_MIN);
+    const inWindow = values.length > 0 && values.every(v => v >= KITE_MIN && v <= KITE_MAX);
     if (inWindow) {
       if (rangeStart === null) rangeStart = dayLabel;
     } else {
