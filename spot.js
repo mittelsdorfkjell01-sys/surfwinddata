@@ -471,8 +471,7 @@ function toggleDataset(index, pill) {
   const meta = activeChart.getDatasetMeta(index);
   meta.hidden = !meta.hidden;
   pill.classList.toggle('hidden', meta.hidden);
-  updateGoodRangeAnnotations(); // mutates annotations
-  activeChart.update('none');   // single re-render: visibility + annotations together
+  activeChart.draw(); // re-render only — no update cycle, zoom state preserved
 }
 
 function computeGoodRanges(datasets) {
@@ -501,19 +500,6 @@ function computeGoodRanges(datasets) {
   return goodRanges;
 }
 
-function updateGoodRangeAnnotations() {
-  if (!activeChart) return;
-  const existing = activeChart.options.plugins.annotation.annotations;
-  const visibleDatasets = activeChart.data.datasets.filter(
-    (_, i) => !activeChart.getDatasetMeta(i).hidden
-  );
-  activeChart.options.plugins.annotation.annotations = {
-    kiteZone: existing.kiteZone,
-    today: existing.today,
-    ...computeGoodRanges(visibleDatasets),
-  };
-  // No chart.update() here — caller is responsible
-}
 
 function makeGoodRangeAnnotation(xMin, xMax) {
   return {
