@@ -506,11 +506,12 @@ function computeGoodRanges(datasets) {
   let rangeStart = null;
   for (let i = 0; i < 365; i++) {
     const dayLabel = i + 1;
-    const allInWindow = datasets.every(ds => {
-      const v = ds.data[i];
-      return v !== null && v !== undefined && !isNaN(v) && v >= KITE_MIN && v <= KITE_MAX;
-    });
-    if (allInWindow) {
+    const values = datasets
+      .map(ds => ds.data[i])
+      .filter(v => v !== null && v !== undefined && !isNaN(v));
+    const avg = values.length > 0 ? values.reduce((s, v) => s + v, 0) / values.length : null;
+    const inWindow = avg !== null && avg >= KITE_MIN && avg <= KITE_MAX;
+    if (inWindow) {
       if (rangeStart === null) rangeStart = dayLabel;
     } else {
       if (rangeStart !== null) {
