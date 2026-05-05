@@ -174,16 +174,16 @@ function buildCompassSVG(dir) {
   const angle = dir !== null ? dir : 0;
   const op = dir !== null ? 1 : 0.3;
   return `<svg viewBox="0 0 48 48" width="48" height="48" style="opacity:${op}">
-    <circle cx="24" cy="24" r="21" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1.5"/>
-    <text x="24" y="9.5" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="7" font-family="Inter,sans-serif" font-weight="600">N</text>
-    <circle cx="24" cy="40" r="1.3" fill="rgba(255,255,255,0.3)"/>
-    <circle cx="40" cy="24" r="1.3" fill="rgba(255,255,255,0.3)"/>
-    <circle cx="8"  cy="24" r="1.3" fill="rgba(255,255,255,0.3)"/>
+    <circle cx="24" cy="24" r="21" fill="none" stroke="rgba(0,0,0,0.18)" stroke-width="1.5"/>
+    <text x="24" y="9.5" text-anchor="middle" fill="rgba(0,0,0,0.55)" font-size="7" font-family="Inter,sans-serif" font-weight="600">N</text>
+    <circle cx="24" cy="40" r="1.3" fill="rgba(0,0,0,0.25)"/>
+    <circle cx="40" cy="24" r="1.3" fill="rgba(0,0,0,0.25)"/>
+    <circle cx="8"  cy="24" r="1.3" fill="rgba(0,0,0,0.25)"/>
     <g transform="rotate(${angle},24,24)">
-      <polygon points="24,5 21,24 24,21.5 27,24" fill="white"/>
-      <polygon points="24,43 21,24 24,26.5 27,24" fill="rgba(255,255,255,0.22)"/>
+      <polygon points="24,5 21,24 24,21.5 27,24" fill="#212121"/>
+      <polygon points="24,43 21,24 24,26.5 27,24" fill="rgba(0,0,0,0.18)"/>
     </g>
-    <circle cx="24" cy="24" r="2.2" fill="white"/>
+    <circle cx="24" cy="24" r="2.2" fill="#212121"/>
   </svg>`;
 }
 
@@ -341,7 +341,7 @@ function buildChart(spot, arr2025) {
     const canvas = document.getElementById('main-chart');
     if (canvas) {
       const ctx = canvas.getContext('2d');
-      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.fillStyle = '#757575';
       ctx.font = '14px Inter, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('Historische Daten nicht verfügbar. Bitte fetch_history.py ausführen.', canvas.width / 2, 60);
@@ -427,18 +427,14 @@ function buildChart(spot, arr2025) {
             callback: (val, idx) => X_LABELS[idx] || null,
             autoSkip: false,
             maxRotation: 0,
-            color: 'rgba(255,255,255,0.6)',
           },
-          grid: { color: 'rgba(255,255,255,0.07)' },
-          border: { color: 'rgba(255,255,255,0.15)' },
+          grid: { color: 'rgba(0,0,0,0.05)' },
         },
         y: {
           min: 0,
           max: 40,
-          title: { display: true, text: 'Tages-Max 09–19 Uhr (kts)', color: 'rgba(255,255,255,0.45)', font: { size: 11 } },
-          ticks: { color: 'rgba(255,255,255,0.6)' },
-          grid: { color: 'rgba(255,255,255,0.07)' },
-          border: { color: 'rgba(255,255,255,0.15)' },
+          title: { display: true, text: 'Tages-Max 09–19 Uhr (kts)', color: '#757575', font: { size: 11 } },
+          grid: { color: 'rgba(0,0,0,0.07)' },
         },
       },
       plugins: {
@@ -473,14 +469,14 @@ function buildChart(spot, arr2025) {
               type: 'box',
               yMin: 16,
               yMax: 30,
-              backgroundColor: 'rgba(76,175,80,0.1)',
-              borderColor: 'rgba(76,175,80,0.35)',
+              backgroundColor: 'rgba(76,175,80,0.07)',
+              borderColor: 'rgba(76,175,80,0.25)',
               borderWidth: 1,
               label: {
                 content: '⬆ Kite-Fenster 16–30 kts',
                 display: true,
                 position: { x: 'start', y: 'end' },
-                color: 'rgba(144,238,144,0.75)',
+                color: 'rgba(76,175,80,0.6)',
                 font: { size: 10 },
               },
             },
@@ -488,14 +484,14 @@ function buildChart(spot, arr2025) {
               type: 'line',
               xMin: currentDayOfYear,
               xMax: currentDayOfYear,
-              borderColor: 'rgba(239,83,80,0.7)',
+              borderColor: 'rgba(239,83,80,0.5)',
               borderWidth: 1,
               borderDash: [4, 4],
               label: {
                 content: 'Heute',
                 display: true,
                 position: 'start',
-                color: 'rgba(255,120,120,0.85)',
+                color: 'rgba(239,83,80,0.7)',
                 font: { size: 10 },
               },
             },

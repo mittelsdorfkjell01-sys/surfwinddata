@@ -283,10 +283,10 @@ header {
 
 .live-overlay {
   width: 50%;
-  background: rgba(30, 30, 30, 0.5);
+  background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0.85rem 1.1rem;
   display: flex;
@@ -300,11 +300,11 @@ header {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #66bb6a;
+  color: var(--green);
 }
-.live-overlay-live.border  { color: #ffca28; }
-.live-overlay-live.no      { color: rgba(255,255,255,0.4); }
-.live-overlay-live.unknown { color: rgba(255,255,255,0.4); }
+.live-overlay-live.border  { color: var(--yellow); }
+.live-overlay-live.no      { color: var(--text-muted); }
+.live-overlay-live.unknown { color: var(--text-muted); }
 
 .live-overlay-main {
   display: flex;
@@ -317,7 +317,7 @@ header {
   font-size: 2rem;
   font-weight: 700;
   line-height: 1;
-  color: #fff;
+  color: var(--text);
   white-space: nowrap;
 }
 
@@ -330,21 +330,21 @@ header {
 
 .live-overlay-cardinal {
   font-size: 0.7rem;
-  color: rgba(255,255,255,0.6);
+  color: var(--text-muted);
   white-space: nowrap;
 }
 
 .live-overlay-time {
   font-size: 0.68rem;
-  color: rgba(255,255,255,0.38);
+  color: var(--text-muted);
 }
 
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 
 /* ── Chart container ── */
 .chart-container {
-  background: rgba(30, 30, 30, 0.5);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 1rem 1.5rem 1.5rem;
   position: relative;
@@ -360,7 +360,7 @@ header {
 
 .chart-hint {
   font-size: 0.72rem;
-  color: rgba(255,255,255,0.4);
+  color: var(--text-muted);
   margin-bottom: 0.5rem;
 }
 
@@ -381,21 +381,21 @@ header {
 
 .legend-hint {
   font-size: 0.7rem;
-  color: rgba(255,255,255,0.4);
+  color: var(--text-muted);
 }
 
 .zoom-reset-btn {
   font-size: 0.75rem;
   font-family: var(--font);
   padding: 0.25rem 0.75rem;
-  border: 1px solid rgba(255,255,255,0.2);
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: rgba(255,255,255,0.08);
-  color: rgba(255,255,255,0.55);
+  background: var(--surface);
+  color: var(--text-muted);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.zoom-reset-btn:hover { background: rgba(255,255,255,0.16); color: #fff; }
+.zoom-reset-btn:hover { background: var(--bg); color: var(--text); }
 
 /* ── Chart legend ── */
 .chart-legend {
@@ -410,15 +410,15 @@ header {
   gap: 0.4rem;
   padding: 0.2rem 0.6rem;
   border-radius: 100px;
-  border: 1px solid rgba(255,255,255,0.18);
+  border: 1px solid var(--border);
   font-size: 0.75rem;
   cursor: pointer;
   user-select: none;
-  background: rgba(255,255,255,0.08);
-  color: rgba(255,255,255,0.8);
+  background: var(--surface);
+  color: var(--text);
   transition: opacity 0.2s;
 }
-.legend-pill.hidden { opacity: 0.3; }
+.legend-pill.hidden { opacity: 0.35; }
 
 .legend-line {
   width: 18px;
