@@ -1,0 +1,22 @@
+# --- Runtime ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+sqlalchemy==2.0.36
+geoalchemy2==0.16.0
+alembic==1.14.0
+psycopg[binary]==3.2.3
+pydantic==2.10.4
+pydantic-settings==2.7.0
+redis==5.2.1
+shapely==2.0.6
+httpx==0.28.1            # Open-Meteo client (Sprint 3 live path) + test client
+
+# --- ERA5 climatology pipeline (Sprint 2) ---
+numpy==2.4.6
+pyarrow==18.1.0          # on-disk format for raw ERA5 extracts
+cdsapi==0.7.4            # Copernicus CDS client (only needed for live downloads)
+# Parsing the CDS NetCDF in the live adapter additionally needs xarray + netCDF4;
+# they are optional and intentionally not pinned here (tests inject a fake client).
+
+# --- Testing ---
+pytest==8.3.4

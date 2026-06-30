@@ -1,0 +1,193 @@
+"""Spot write workflow: create, curate, override, publish."""
+
+from __future__ import annotations
+
+import re
+import uuid
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from app.admin.audit import record_audit
+from app.admin.constants import STATUS_DRAFT, STATUS_LIVE
+from app.admin.readiness import validate_spot_readiness
+from app.services.overrides import (
+    OVERRIDABLE_FIELDS,
+    apply_overrides_with_provenance,
+)
+
+
+class NotReadyError(Exception):
+    """Raised when set_spot_live is called on an incomplete spot."""
+
+    def __init__(self, gaps: list[str], checklist: list[dict]):
+        super().__init__(f"spot not ready; missing: {gaps}")
+        self.gaps = gaps
+        self.checklist = checklist
+
+
+def _slugify(name: str) -> str:
+    base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return base or uuid.uuid4().hex[:8]
+
+
+def _point(lat: float, lon: float):
+    from geoalchemy2.shape import from_shape
+    from shapely.geometry import Point
+
+    return from_shape(Point(lon, lat), srid=4326)
+
+
+def _load(db: Session, spot_id):
+    from app.models import Spot
+
+    spot = db.get(Spot, spot_id)
+    if spot is None:
+        raise LookupError(f"unknown spot {spot_id}")
+    return spot
+
+
+def create_spot(
+    data: dict, *, db: Session, client=None, actor: str | None = "admin"
+) -> Any:
+    """Create a draft spot, inherit region defaults, and kick off the ERA5 job.
+
+    ``data`` carries ``name``, ``region_id``, ``lat``, ``lon``, ``sports`` and the
+    optional structural columns. Region ``defaults`` act as a template: ``model_pref``
+    and an optional ``spot_template`` editorial blob are pre-filled when not given.
+    """
+    from app.era5.grid import resolve_grid_cell
+    from app.models import Region, Spot
+
+    region = db.get(Region, data["region_id"])
+    if region is None:
+        raise LookupError(f"unknown region {data['region_id']}")
+    defaults = region.defaults or {}
+
+    lat, lon = float(data["lat"]), float(data["lon"])
+    editorial = dict(defaults.get("spot_template") or {})
+    editorial.update(data.get("editorial") or {})
+
+    spot = Spot(
+        slug=data.get("slug") or _slugify(data["name"]),
+        name=data["name"],
+        region_id=region.id,
+        location=_point(lat, lon),
+        sports=data.get("sports") or [],
+        water_type=data.get("water_type"),
+        bottom_type=data.get("bottom_type"),
+        level=data.get("level"),
+        facing=data.get("facing"),
+        model_pref=data.get("model_pref") or defaults.get("model_pref"),
+        editorial=editorial or None,
+        era5_cell=resolve_grid_cell(lat, lon),
+        status=STATUS_DRAFT,
+    )
+    db.add(spot)
+    db.flush()  # assign spot.id
+    record_audit(db, spot.id, "create", {"name": spot.name}, actor)
+    db.commit()
+    db.refresh(spot)
+
+    # Best-effort ERA5 trigger (idempotent); never blocks spot creation.
+    if client is not None:
+        from app.admin.jobs import trigger_era5_job
+
+        try:
+            trigger_era5_job(spot.id, db=db, client=client)
+        except Exception:
+            db.rollback()
+    return spot
+
+
+def update_spot_metadata(
+    spot_id, editorial: dict, *, db: Session, actor: str | None = "admin"
+) -> Any:
+    """Merge editorial fields (incl. free text). Each field takes a value or ``n/a``.
+
+    There is intentionally no ``wind_danger``/``hazards`` field.
+    """
+    spot = _load(db, spot_id)
+    merged = dict(spot.editorial or {})
+    for key, value in (editorial or {}).items():
+        if key in ("wind_danger", "hazards"):
+            continue  # explicitly dropped
+        merged[key] = value
+    spot.editorial = merged
+    record_audit(db, spot.id, "update", {"editorial_keys": sorted(editorial or {})}, actor)
+    db.commit()
+    db.refresh(spot)
+    return spot
+
+
+def override_auto_field(
+    spot_id, field: str, value: Any, *, db: Session, actor: str | None = "admin"
+) -> Any:
+    """Pin ``field`` to ``value`` in ``spots.overrides`` (auto value preserved)."""
+    if field not in OVERRIDABLE_FIELDS:
+        raise ValueError(f"field not overridable: {field!r}")
+    spot = _load(db, spot_id)
+    overrides = dict(spot.overrides or {})
+    auto_value = getattr(spot, field, None)
+    previous = overrides.get(field)
+    overrides[field] = value
+    spot.overrides = overrides
+    record_audit(
+        db, spot.id, "override",
+        {"field": field, "auto": auto_value, "from": previous, "to": value}, actor,
+    )
+    db.commit()
+    db.refresh(spot)
+    return spot
+
+
+def revert_override(
+    spot_id, field: str, *, db: Session, actor: str | None = "admin"
+) -> Any:
+    """Drop an override so the auto value is active again."""
+    spot = _load(db, spot_id)
+    overrides = dict(spot.overrides or {})
+    if field not in overrides:
+        raise ValueError(f"no override for field: {field!r}")
+    previous = overrides.pop(field)
+    spot.overrides = overrides or None
+    record_audit(db, spot.id, "revert", {"field": field, "from": previous}, actor)
+    db.commit()
+    db.refresh(spot)
+    return spot
+
+
+def manage_spot_image(
+    spot_id, image: dict, *, db: Session, actor: str | None = "admin"
+) -> Any:
+    """Set the spot image; the rights fields url/source/license/credit are mandatory."""
+    missing = [k for k in ("url", "source", "license", "credit")
+               if not (isinstance(image.get(k), str) and image[k].strip())]
+    if missing:
+        raise ValueError(f"image missing rights fields: {missing}")
+    spot = _load(db, spot_id)
+    spot.image = {k: image[k] for k in ("url", "source", "license", "credit")}
+    record_audit(db, spot.id, "image", {"url": image["url"]}, actor)
+    db.commit()
+    db.refresh(spot)
+    return spot
+
+
+def set_spot_live(spot_id, *, db: Session, actor: str | None = "admin") -> dict:
+    """Publish a spot — only if ready; otherwise raise :class:`NotReadyError`."""
+    readiness = validate_spot_readiness(spot_id, db=db)
+    if not readiness["ready"]:
+        raise NotReadyError(readiness["gaps"], readiness["checklist"])
+    spot = _load(db, spot_id)
+    spot.status = STATUS_LIVE
+    record_audit(db, spot.id, "publish", {"status": STATUS_LIVE}, actor)
+    db.commit()
+    db.refresh(spot)
+    return {"spot_id": str(spot.id), "status": spot.status, "ready": True}
+
+
+def spot_effective_view(spot_id, *, db: Session) -> dict:
+    """Effective field values with per-field provenance (``überschrieben`` / ``auto``)."""
+    spot = _load(db, spot_id)
+    view = apply_overrides_with_provenance(spot)
+    return {"spot_id": str(spot.id), "status": spot.status, **view}
