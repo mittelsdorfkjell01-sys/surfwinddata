@@ -1,0 +1,375 @@
+import { useEffect, useRef } from "react";
+import { MapContainer, TileLayer, useMap } from "react-leaflet";
+import type { WaterType } from "../data/spotDetail";
+
+const rad = (deg: number) => (deg * Math.PI) / 180;
+const MAP_ZOOM = 14.5;
+
+/** Leaflet renders no tiles when its container was sized 0 / resized after
+ *  init (classic flex/grid bug). Nudge it once mounted and on every resize. */
+function InvalidateSize() {
+  const map = useMap();
+  useEffect(() => {
+    map.invalidateSize();
+    const t = setTimeout(() => map.invalidateSize(), 250);
+    const ro = new ResizeObserver(() => map.invalidateSize());
+    ro.observe(map.getContainer());
+    return () => {
+      clearTimeout(t);
+      ro.disconnect();
+    };
+  }, [map]);
+  return null;
+}
+
+/**
+ * Spot map: the label-free CARTO Voyager basemap (same look as the big map),
+ * tightly framed on the spot, non-interactive. A canvas overlay animates the
+ * live conditions:
+ *
+ *  • Wind — parallel particle streaks flowing toward where the wind blows
+ *    (windDir + 180). Speed and streak length scale with wind strength.
+ *  • Waves — crest lines rolling toward the coast (onshore bearing) and
+ *    breaking into foam near the beach. Their speed and spacing come from the
+ *    swell period (spacing = phase-speed × period); chop breaks jagged, swell
+ *    rolls smooth.
+ *
+ * Everything is data-driven; the animation pauses under prefers-reduced-motion.
+ */
+export default function SpotFlowMap({
+  coords,
+  windDir,
+  windKts,
+  waveDir,
+  coast,
+  period,
+  waterType,
+}: {
+  coords: [number, number];
+  windDir: number; // degrees wind comes FROM
+  windKts: number;
+  waveDir: number; // degrees the swell comes FROM
+  coast: number; // onshore bearing (degrees) — the beach the waves break onto
+  period: number; // s
+  waterType: WaterType;
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    const canvas = canvasRef.current;
+    if (!wrap || !canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    let w = wrap.clientWidth || 380;
+    let h = wrap.clientHeight || 320;
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const sizeCanvas = () => {
+      w = wrap.clientWidth || 380;
+      h = wrap.clientHeight || 320;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+    };
+    sizeCanvas();
+
+    // ---- Wind: parallel particles toward windTo ----
+    const windTo = (windDir + 180) % 360;
+    const wv = { x: Math.sin(rad(windTo)), y: -Math.cos(rad(windTo)) };
+    const windSpeed = 6 + windKts * 2.7; // px/sec — scales with wind (20 kts ≈ old 30)
+    const vx = wv.x * windSpeed;
+    const vy = wv.y * windSpeed;
+    const trailMax = Math.round(22 + windKts * 2.4);
+    const perp = { x: -wv.y, y: wv.x }; // for the arrowheads
+    const N = Math.max(50, Math.min(170, Math.round((w * h) / 1900)));
+    type P = { x: number; y: number; life: number; max: number; trail: number[][] };
+    const seedTrail = (x: number, y: number) => {
+      const t: number[][] = [];
+      for (let k = 4; k >= 1; k--) t.push([x - vx * 0.05 * k, y - vy * 0.05 * k]);
+      t.push([x, y]);
+      return t;
+    };
+    const respawn = (p: P) => {
+      p.x = Math.random() * w;
+      p.y = Math.random() * h;
+      p.life = 0;
+      p.max = 60 + Math.random() * 90;
+      p.trail = seedTrail(p.x, p.y);
+    };
+    const particles: P[] = Array.from({ length: N }, () => {
+      const p = { x: 0, y: 0, life: 0, max: 0, trail: [] as number[][] };
+      respawn(p);
+      p.life = Math.random() * p.max;
+      return p;
+    });
+
+    // ---- Swell: crests travel along the swell direction and break along the
+    //      coast. The angle between the two makes the break peel down the beach.
+    const diag = Math.hypot(w, h);
+    const half = diag / 2;
+    const swellTravel = (waveDir + 180) % 360; // bearing the waves move toward
+    const travelRad = rad(swellTravel);
+    // Oblique angle between swell travel and onshore direction, clamped so the
+    // waves always progress onshore (extreme obliquity would refract anyway).
+    let dphi = ((coast - swellTravel + 540) % 360) - 180;
+    dphi = Math.max(-70, Math.min(70, dphi));
+    const sinP = Math.sin(rad(dphi));
+    const cosP = Math.cos(rad(dphi));
+    const crestSpeed = 9 * period; // px/sec along travel; spacing = 9·T²
+    const Dbreak = -0.13 * half; // starts breaking offshore, before the beach
+    const Dshore = 0.05 * half; // the beach edge — waves stop here (no overrun)
+    const sSpawn = -(half + 40) / cosP; // spawn offshore
+    const amp = waterType === "swell" ? 7 : 2;
+    const beyondShore = (s: number) => s * cosP - half * Math.abs(sinP) > Dshore;
+    let crests: number[] = [];
+    {
+      const stepS = Math.max(24, crestSpeed * period);
+      for (let s = sSpawn, n = 0; !beyondShore(s) && n < 60; s += stepS, n++) crests.push(s);
+    }
+    let acc = 0;
+
+    // ---- Chop: a field of whitecaps that twinkle in place (no travel/period) ----
+    type Mark = { x: number; y: number; ph: number; spd: number; size: number };
+    let chopMarks: Mark[] = [];
+    // Set once the basemap has been sampled; keeps chop off the land.
+    let waterMask: ((x: number, y: number) => boolean) | null = null;
+    const buildChop = () => {
+      chopMarks = [];
+      if (waterType !== "chop") return;
+      const gap = 28;
+      for (let gy = gap * 0.5; gy < h; gy += gap)
+        for (let gx = gap * 0.5; gx < w; gx += gap) {
+          const x = gx + (Math.random() - 0.5) * gap * 0.7;
+          const y = gy + (Math.random() - 0.5) * gap * 0.7;
+          if (waterMask && !waterMask(x, y)) continue; // waves only over water
+          chopMarks.push({
+            x,
+            y,
+            ph: Math.random() * Math.PI * 2,
+            spd: 0.7 + Math.random() * 0.8,
+            size: 3 + Math.random() * 3,
+          });
+        }
+    };
+    buildChop();
+
+    // Sample the Voyager basemap to tell water (bluish) from land (warm), so the
+    // chop can be restricted to the water. Falls back to "everywhere" if the
+    // tiles can't be read (e.g. no CORS).
+    async function buildWaterMask() {
+      if (waterType !== "chop" || w === 0 || h === 0) return;
+      const scale = 256 * Math.pow(2, MAP_ZOOM);
+      const latRad = rad(coords[0]);
+      const cwx = ((coords[1] + 180) / 360) * scale;
+      const cwy = ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale;
+      const tlx = cwx - w / 2;
+      const tly = cwy - h / 2;
+      const zt = 14;
+      const f = Math.pow(2, zt - MAP_ZOOM); // display px → tile-zoom px
+      const mw = Math.max(1, Math.ceil(w * f));
+      const mh = Math.max(1, Math.ceil(h * f));
+      const tlxZt = tlx * f;
+      const tlyZt = tly * f;
+      const off = document.createElement("canvas");
+      off.width = mw;
+      off.height = mh;
+      const octx = off.getContext("2d", { willReadFrequently: true });
+      if (!octx) return;
+      const x0 = Math.floor(tlxZt / 256);
+      const x1 = Math.floor((tlxZt + mw) / 256);
+      const y0 = Math.floor(tlyZt / 256);
+      const y1 = Math.floor((tlyZt + mh) / 256);
+      const jobs: Promise<void>[] = [];
+      for (let tx = x0; tx <= x1; tx++)
+        for (let ty = y0; ty <= y1; ty++)
+          jobs.push(
+            new Promise<void>((res) => {
+              const img = new Image();
+              img.crossOrigin = "anonymous";
+              img.onload = () => {
+                octx.drawImage(img, tx * 256 - tlxZt, ty * 256 - tlyZt);
+                res();
+              };
+              img.onerror = () => res();
+              img.src = `https://a.basemaps.cartocdn.com/rastertiles/voyager_nolabels/${zt}/${tx}/${ty}.png`;
+            })
+          );
+      await Promise.all(jobs);
+      let data: Uint8ClampedArray;
+      try {
+        data = octx.getImageData(0, 0, mw, mh).data;
+      } catch {
+        return; // tainted canvas → keep the fallback (chop everywhere)
+      }
+      waterMask = (px, py) => {
+        const mx = Math.floor(px * f);
+        const my = Math.floor(py * f);
+        if (mx < 0 || my < 0 || mx >= mw || my >= mh) return true;
+        const i = (my * mw + mx) * 4;
+        return data[i + 2] - data[i] >= 6; // Voyager water is bluish (b − r ≥ 6)
+      };
+      buildChop();
+    }
+    void buildWaterMask();
+
+    let raf = 0;
+    let last = performance.now();
+
+    const draw = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+
+      // Swell — crests roll along the swell direction; each point breaks when it
+      // reaches the shore (onshore distance d), so an oblique crest peels.
+      if (waterType === "swell") {
+        acc += dt;
+        while (acc >= period) {
+          acc -= period;
+          crests.push(sSpawn);
+        }
+        crests = crests.map((s) => s + crestSpeed * dt).filter((s) => !beyondShore(s));
+
+        ctx.save();
+        ctx.translate(w / 2, h / 2);
+        ctx.rotate(travelRad);
+        ctx.lineCap = "round";
+        for (const s of crests) {
+          const yBase = -s;
+          let px = 0;
+          let py = 0;
+          let has = false;
+          for (let x = -half - 20; x <= half + 20; x += 6) {
+            const d = x * sinP + s * cosP; // onshore distance of this point
+            if (d > Dshore) {
+              has = false; // reached the beach — waves stop here, no overrun
+              continue;
+            }
+            const yy = yBase + Math.sin(x * 0.03 + s * 0.05) * amp;
+            if (has) {
+              if (d >= Dbreak) {
+                const p = Math.min(1, (d - Dbreak) / (Dshore - Dbreak));
+                ctx.strokeStyle = `rgba(255,255,255,${0.9 * (1 - p * 0.4)})`;
+                ctx.lineWidth = 2 + 3 * (1 - p); // foam thickest at the break
+              } else {
+                const a = 0.3 + 0.4 * Math.min(1, (s * cosP + half) / (2 * half));
+                ctx.strokeStyle = `rgba(47,111,176,${a})`;
+                ctx.lineWidth = 3;
+              }
+              ctx.beginPath();
+              ctx.moveTo(px, py);
+              ctx.lineTo(x, yy);
+              ctx.stroke();
+            }
+            px = x;
+            py = yy;
+            has = true;
+          }
+        }
+        ctx.restore();
+      } else if (waterType === "chop") {
+        // Chop / Kabbelwasser — a rippled surface: whitecaps twinkle in place,
+        // no travel and no period, just an agitated sea. A soft dark shadow
+        // keeps the white caps readable on the light basemap.
+        ctx.lineCap = "round";
+        ctx.lineWidth = 1.8;
+        ctx.shadowColor = "rgba(15,39,72,0.45)";
+        ctx.shadowBlur = 2.5;
+        for (const m of chopMarks) {
+          const tw = Math.sin(now * 0.0035 * m.spd + m.ph);
+          if (tw < 0.15) continue;
+          const a = ((tw - 0.15) / 0.85) * 0.9;
+          const yb = m.y + Math.sin(now * 0.004 + m.ph) * 1.4;
+          ctx.strokeStyle = `rgba(255,255,255,${a})`;
+          ctx.beginPath();
+          ctx.moveTo(m.x - m.size, yb + 1.4);
+          ctx.quadraticCurveTo(m.x, yb - m.size * 0.7, m.x + m.size, yb + 1.4);
+          ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+      }
+      // flat: no wave animation
+
+      // Wind (screen space, parallel)
+      ctx.lineCap = "round";
+      ctx.lineWidth = 1.5;
+      for (const p of particles) {
+        p.x += vx * dt;
+        p.y += vy * dt;
+        p.life += dt * 60;
+        p.trail.push([p.x, p.y]);
+        if (p.trail.length > trailMax) p.trail.shift();
+        if (p.life > p.max || p.x < -24 || p.x > w + 24 || p.y < -24 || p.y > h + 24) {
+          respawn(p);
+          continue;
+        }
+        const t = p.trail;
+        const fade = Math.min(1, p.life / 10);
+        for (let i = 1; i < t.length; i++) {
+          const a = (i / t.length) * fade * 0.5;
+          ctx.strokeStyle = `rgba(19,51,94,${a})`;
+          ctx.beginPath();
+          ctx.moveTo(t[i - 1][0], t[i - 1][1]);
+          ctx.lineTo(t[i][0], t[i][1]);
+          ctx.stroke();
+        }
+        // arrowhead at the leading tip, pointing downwind
+        const ah = 3.8;
+        ctx.fillStyle = `rgba(19,51,94,${fade * 0.5})`;
+        ctx.beginPath();
+        ctx.moveTo(p.x + wv.x * ah, p.y + wv.y * ah);
+        ctx.lineTo(p.x - perp.x * ah * 0.6 - wv.x * ah * 0.35, p.y - perp.y * ah * 0.6 - wv.y * ah * 0.35);
+        ctx.lineTo(p.x + perp.x * ah * 0.6 - wv.x * ah * 0.35, p.y + perp.y * ah * 0.6 - wv.y * ah * 0.35);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      raf = requestAnimationFrame(draw);
+    };
+
+    if (reduce) {
+      last = performance.now();
+      draw(last + 16);
+      cancelAnimationFrame(raf); // one static frame only
+    } else {
+      raf = requestAnimationFrame(draw);
+    }
+
+    const ro = new ResizeObserver(() => {
+      sizeCanvas();
+      buildChop();
+      void buildWaterMask();
+    });
+    ro.observe(wrap);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, [coords[0], coords[1], windDir, windKts, waveDir, coast, period, waterType]);
+
+  return (
+    <div ref={wrapRef} className="relative h-[360px] overflow-hidden rounded-2xl">
+      <MapContainer
+        center={coords}
+        zoom={MAP_ZOOM}
+        zoomSnap={0.5}
+        zoomControl={false}
+        scrollWheelZoom={false}
+        dragging={false}
+        doubleClickZoom={false}
+        keyboard={false}
+        attributionControl={false}
+        className="h-full w-full"
+      >
+        <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png" subdomains="abcd" />
+        <InvalidateSize />
+      </MapContainer>
+
+      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 z-[500] h-full w-full" />
+    </div>
+  );
+}

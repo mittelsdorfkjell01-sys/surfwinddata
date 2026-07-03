@@ -1,0 +1,24 @@
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import "leaflet/dist/leaflet.css";
+import "./index.css";
+import Landing from "./pages/Landing";
+import MapView from "./pages/MapView";
+import SpotDetail from "./pages/SpotDetail";
+import RegionDetail from "./pages/RegionDetail";
+import AdminSpotImage from "./pages/AdminSpotImage";
+
+const router = createBrowserRouter([
+  { path: "/", element: <Landing /> },
+  { path: "/map", element: <MapView /> },
+  { path: "/spot/:id", element: <SpotDetail /> },
+  { path: "/region/:slug", element: <RegionDetail /> },
+  { path: "/admin/spot-image", element: <AdminSpotImage /> },
+]);
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <RouterProvider router={router} />
+  </React.StrictMode>
+);

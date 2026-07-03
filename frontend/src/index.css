@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply font-sans text-navy antialiased;
+    margin: 0;
+  }
+
+  /* Uppercase field labels: WO? / WANN? */
+  .label-caps {
+    @apply text-[12px] font-medium tracking-[0.18em] text-navy/70 uppercase;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* --- Spot map flow animations --- */
+
+/* Wind streaks drift along the (rotated) local Y = wind travel direction. */
+@keyframes swd-wind {
+  0% { transform: translateY(58px); opacity: 0; }
+  18% { opacity: 0.95; }
+  82% { opacity: 0.95; }
+  100% { transform: translateY(-64px); opacity: 0; }
+}
+/* Short, quick, jittery bob → choppy / Kabbelwasser. */
+@keyframes swd-chop {
+  0%, 100% { transform: translateY(0) scaleX(1); opacity: 0.85; }
+  50% { transform: translateY(-2.5px) scaleX(0.82); opacity: 1; }
+}
+/* Long, slow lateral roll → clean swell. */
+@keyframes swd-swell {
+  0% { transform: translateX(-7px); opacity: 0.5; }
+  50% { opacity: 0.95; }
+  100% { transform: translateX(7px); opacity: 0.5; }
+}
+/* Faint shimmer → flat water. */
+@keyframes swd-flat {
+  0%, 100% { opacity: 0.28; }
+  50% { opacity: 0.6; }
+}
+
+.swd-wind-streak { animation: swd-wind 2.4s linear infinite; }
+.swd-wave-chop { animation: swd-chop 0.85s ease-in-out infinite; }
+.swd-wave-swell { animation: swd-swell 3.4s ease-in-out infinite; }
+.swd-wave-flat { animation: swd-flat 2.6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .swd-wind-streak,
+  .swd-wave-chop,
+  .swd-wave-swell,
+  .swd-wave-flat {
+    animation: none;
+  }
+}
+
+/* --- Leaflet look tweaks to match the mock --- */
+.leaflet-container {
+  font-family: "Poppins", system-ui, sans-serif;
+  /* Neutral light tone that matches the tinted basemap while tiles load */
+  background: #dfeaea;
+}
+
+/* Colour wash over the CARTO Voyager basemap: water leans light blue,
+   land leans light green. Applies only to map tiles, so the navy pins,
+   labels overlay and controls keep their own colours. */
+.leaflet-tile {
+  filter: hue-rotate(22deg) saturate(1.35);
+}
+
+/* Hide leaflet default popup chrome; we render our own card */
+.spot-popup .leaflet-popup-content-wrapper {
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  border-radius: 1rem;
+}
+.spot-popup .leaflet-popup-content {
+  margin: 0;
+}
+.spot-popup .leaflet-popup-tip-container {
+  display: none;
+}
+.spot-popup .leaflet-popup-close-button {
+  display: none;
+}

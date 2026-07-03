@@ -1,0 +1,102 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
+import L, { type Map as LeafletMap } from "leaflet";
+import Header from "../components/Header";
+import MapSpotCard from "../components/MapSpotCard";
+import { CloseIcon, MinusIcon, PlusIcon } from "../lib/icons";
+import { mapSpots } from "../data/spots";
+
+/** Navy teardrop pin as a Leaflet divIcon. */
+const pinIcon = L.divIcon({
+  className: "swd-pin",
+  html: `<svg width="30" height="38" viewBox="0 0 24 30" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 0C5.7 0 1 4.7 1 10.7 1 18.4 12 30 12 30s11-11.6 11-19.3C23 4.7 18.3 0 12 0Z"
+        fill="#13335E" stroke="#ffffff" stroke-width="1.4"/>
+      <circle cx="12" cy="10.5" r="3.4" fill="#ffffff"/>
+    </svg>`,
+  iconSize: [30, 38],
+  iconAnchor: [15, 38],
+  popupAnchor: [0, -34],
+});
+
+export default function MapView() {
+  const navigate = useNavigate();
+  const [map, setMap] = useState<LeafletMap | null>(null);
+
+  return (
+    <div className="relative h-screen w-screen overflow-hidden">
+      <Header />
+
+      <MapContainer
+        center={[40.3, 9.3]}
+        zoom={7}
+        zoomControl={false}
+        scrollWheelZoom
+        ref={setMap}
+        className="h-full w-full"
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+          subdomains="abcd"
+        />
+
+        {mapSpots.map((spot) =>
+          spot.coords ? (
+            <Marker key={spot.id} position={spot.coords} icon={pinIcon}>
+              <Popup className="spot-popup" autoClose={false} closeOnClick={false}>
+                <MapSpotCard spot={spot} className="w-[200px]" />
+              </Popup>
+            </Marker>
+          ) : null
+        )}
+      </MapContainer>
+
+      {/* Top-right controls: close + zoom */}
+      <div className="pointer-events-none absolute right-4 top-4 z-[900] flex flex-col items-end gap-3 sm:right-6 sm:top-6">
+        <button
+          type="button"
+          aria-label="Karte schließen"
+          onClick={() => navigate("/")}
+          className="pointer-events-auto grid h-11 w-11 place-items-center rounded-full bg-white text-navy shadow-bar transition-colors hover:bg-line/40"
+        >
+          <CloseIcon className="text-[20px]" />
+        </button>
+
+        <div className="pointer-events-auto flex flex-col overflow-hidden rounded-full bg-white shadow-bar">
+          <button
+            type="button"
+            aria-label="Vergrößern"
+            onClick={() => map?.zoomIn()}
+            className="grid h-11 w-11 place-items-center text-navy transition-colors hover:bg-line/40"
+          >
+            <PlusIcon className="text-[20px]" />
+          </button>
+          <span className="mx-2 h-px bg-line" />
+          <button
+            type="button"
+            aria-label="Verkleinern"
+            onClick={() => map?.zoomOut()}
+            className="grid h-11 w-11 place-items-center text-navy transition-colors hover:bg-line/40"
+          >
+            <MinusIcon className="text-[20px]" />
+          </button>
+        </div>
+      </div>
+
+      {/* Recommended strip — evenly distributed across the full width */}
+      <div className="absolute inset-x-0 bottom-0 z-[600] pb-5 pt-10">
+        <div className="mx-auto flex max-w-[1400px] gap-x-6 overflow-x-auto no-scrollbar px-4 sm:overflow-visible sm:px-8">
+          {mapSpots.slice(0, 5).map((spot) => (
+            <MapSpotCard
+              key={spot.id}
+              spot={spot}
+              className="w-[160px] shrink-0 sm:w-auto sm:min-w-0 sm:flex-1"
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

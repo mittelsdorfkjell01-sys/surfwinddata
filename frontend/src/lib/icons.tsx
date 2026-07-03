@@ -1,0 +1,154 @@
+import type { SVGProps } from "react";
+
+/** Thin, consistent line icons (stroke = currentColor) sized 1em by default. */
+type IconProps = SVGProps<SVGSVGElement>;
+
+const base = {
+  width: "1em",
+  height: "1em",
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.8,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+
+export const SearchIcon = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m20 20-3.5-3.5" />
+  </svg>
+);
+
+export const MenuIcon = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <path d="M4 7h16M4 12h16M4 17h16" />
+  </svg>
+);
+
+export const UserIcon = (p: IconProps) => (
+  <svg {...base} {...p} viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <circle cx="12" cy="8.5" r="3.6" />
+    <path d="M4.5 20a7.5 7.5 0 0 1 15 0Z" />
+  </svg>
+);
+
+export const HeartIcon = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <path d="M12 20s-7-4.35-9.2-8.6C1.3 8.2 3 5 6.2 5c1.9 0 3.1 1 3.8 2 .7-1 1.9-2 3.8-2 3.2 0 4.9 3.2 3.4 6.4C19 15.65 12 20 12 20Z" />
+  </svg>
+);
+
+export const GridIcon = (p: IconProps) => (
+  <svg {...base} {...p} fill="currentColor" stroke="none">
+    <rect x="3.5" y="3.5" width="7" height="7" rx="1.6" />
+    <rect x="13.5" y="3.5" width="7" height="7" rx="1.6" />
+    <rect x="3.5" y="13.5" width="7" height="7" rx="1.6" />
+    <rect x="13.5" y="13.5" width="7" height="7" rx="1.6" />
+  </svg>
+);
+
+export const MapIcon = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <path d="M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6 9 4Z" />
+    <path d="M9 4v14M15 6v14" />
+  </svg>
+);
+
+export const SortIcon = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <path d="M4 8h11" />
+    <circle cx="17.5" cy="8" r="2" />
+    <path d="M4 16h5" />
+    <circle cx="11.5" cy="16" r="2" />
+    <path d="M14 16h6" />
+  </svg>
+);
+
+export const PinIcon = (p: IconProps) => (
+  <svg {...base} {...p} fill="currentColor" stroke="none">
+    <path d="M12 2c3.87 0 7 3.13 7 7 0 4.87-7 13-7 13S5 13.87 5 9c0-3.87 3.13-7 7-7Z" />
+    <circle cx="12" cy="9" r="2.6" fill="#fff" />
+  </svg>
+);
+
+export const CalendarIcon = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+    <path d="M3.5 9.5h17M8 3.5v3M16 3.5v3" />
+  </svg>
+);
+
+export const CloseIcon = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <path d="M6 6l12 12M18 6 6 18" />
+  </svg>
+);
+
+export const PlusIcon = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
+
+export const MinusIcon = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <path d="M5 12h14" />
+  </svg>
+);
+
+export const ChevronDownIcon = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <path d="m6 9 6 6 6-6" />
+  </svg>
+);
+
+export const InfoIcon = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 11v5M12 8h.01" />
+  </svg>
+);
+
+/** Facility: paid parking — a rounded "P" tile. */
+export const ParkingIcon = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <rect x="4" y="4" width="16" height="16" rx="4" />
+    <path d="M9.5 16.5V8h3a2.5 2.5 0 0 1 0 5h-3" />
+  </svg>
+);
+
+/** Facility: surf/water school — graduation cap. */
+export const SchoolIcon = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <path d="M12 4 2.5 9 12 14l9.5-5L12 4Z" />
+    <path d="M6.5 11v4.2c0 1 2.5 2.3 5.5 2.3s5.5-1.3 5.5-2.3V11" />
+    <path d="M21.5 9v4.5" />
+  </svg>
+);
+
+/** Facility: restrooms & showers — a shower head with drops. */
+export const ShowerIcon = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <path d="M4 20V8a4 4 0 0 1 4-4c1.7 0 2.6.9 3.3 1.9" />
+    <path d="M10 8.5 15.5 6" />
+    <path d="M9.5 7 17 11" />
+    <path d="M8 14v.01M11 16v.01M14 14v.01M11 20v.01" />
+  </svg>
+);
+
+/** Facility: beach bar — food & drink. */
+export const FoodIcon = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <path d="M5 3v7a2 2 0 0 0 2 2h0v9M9 3v9M7 3v4" />
+    <path d="M17 3c-1.7 0-3 2.2-3 5s1.3 4 3 4v9" />
+  </svg>
+);
+
+/** Community tip — an opening quotation mark. */
+export const QuoteIcon = (p: IconProps) => (
+  <svg {...base} {...p} fill="currentColor" stroke="none">
+    <path d="M7.5 6C5 6 3.5 8 3.5 10.7c0 2.4 1.6 3.8 3.5 3.8 1.3 0 2.3-.9 2.3-2.2 0-1.2-.9-2.1-2-2.1-.2 0-.5 0-.6.1.2-1 1.1-1.9 2.3-2.2L7.5 6Zm9 0c-2.5 0-4 2-4 4.7 0 2.4 1.6 3.8 3.5 3.8 1.3 0 2.3-.9 2.3-2.2 0-1.2-.9-2.1-2-2.1-.2 0-.5 0-.6.1.2-1 1.1-1.9 2.3-2.2L16.5 6Z" />
+  </svg>
+);

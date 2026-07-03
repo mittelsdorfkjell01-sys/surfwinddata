@@ -1,0 +1,142 @@
+import { useRef, useState } from "react";
+
+/** Hero-image requirements — kept in one place so the disclaimer and the
+ *  validation gate can never drift apart. Mirrors the generation pipeline
+ *  (scripts/gen_hero.py, MAX_WIDTH = 3840). */
+export const HERO_REQ = {
+  minWidth: 3840,
+  minHeight: 2000,
+  formats: ["image/jpeg", "image/png"],
+  formatLabel: "JPG oder PNG",
+  maxBytes: 12 * 1024 * 1024, // 12 MB
+};
+
+type Result =
+  | { ok: true; width: number; height: number }
+  | { ok: false; reason: string; width?: number; height?: number };
+
+function validate(file: File): Promise<Result> {
+  return new Promise((resolve) => {
+    if (!HERO_REQ.formats.includes(file.type)) {
+      return resolve({ ok: false, reason: `Format muss ${HERO_REQ.formatLabel} sein.` });
+    }
+    if (file.size > HERO_REQ.maxBytes) {
+      return resolve({ ok: false, reason: `Datei zu groß (max. ${Math.round(HERO_REQ.maxBytes / 1024 / 1024)} MB).` });
+    }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const { naturalWidth: w, naturalHeight: h } = img;
+      if (w < HERO_REQ.minWidth)
+        return resolve({ ok: false, width: w, height: h, reason: `Zu klein: ${w}×${h} px — mindestens ${HERO_REQ.minWidth} px Breite nötig.` });
+      if (h < HERO_REQ.minHeight)
+        return resolve({ ok: false, width: w, height: h, reason: `Zu niedrig: ${w}×${h} px — mindestens ${HERO_REQ.minHeight} px Höhe nötig.` });
+      if (h >= w)
+        return resolve({ ok: false, width: w, height: h, reason: `Querformat erforderlich (aktuell ${w}×${h} px).` });
+      resolve({ ok: true, width: w, height: h });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve({ ok: false, reason: "Bild konnte nicht gelesen werden." });
+    };
+    img.src = url;
+  });
+}
+
+/** Admin image field: shows the size disclaimer and only lets a file through
+ *  the gate when it satisfies HERO_REQ. `onAccept` fires with the valid file. */
+export default function ImageUpload({ onAccept }: { onAccept?: (file: File) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [result, setResult] = useState<Result | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+
+  const handleFile = async (file?: File | null) => {
+    setPreview((p) => {
+      if (p) URL.revokeObjectURL(p);
+      return null;
+    });
+    setResult(null);
+    setFileName(null);
+    if (!file) return;
+
+    const res = await validate(file);
+    setResult(res);
+    setFileName(file.name);
+    if (res.ok) {
+      setPreview(URL.createObjectURL(file));
+      onAccept?.(file);
+    }
+  };
+
+  const valid = result?.ok === true;
+
+  return (
+    <div className="rounded-2xl bg-[#F1F5FA] p-6">
+      {/* Disclaimer */}
+      <div className="rounded-xl bg-navy/5 p-4 text-[13px] leading-relaxed text-navy/80">
+        <p className="font-semibold text-navy">Anforderungen an das Header-Bild</p>
+        <ul className="mt-2 space-y-1">
+          <li>• Mindestbreite <strong>{HERO_REQ.minWidth} px</strong> (für Retina-/4K-Displays, damit nichts hochskaliert wird)</li>
+          <li>• Mindesthöhe {HERO_REQ.minHeight} px, <strong>Querformat</strong></li>
+          <li>• Format {HERO_REQ.formatLabel}, unkomprimiertes Original bevorzugt</li>
+          <li>• Max. {Math.round(HERO_REQ.maxBytes / 1024 / 1024)} MB</li>
+        </ul>
+        <p className="mt-2 text-muted">
+          Kleinere Bilder werden <strong>abgelehnt</strong> — der Upload ist erst nach erfüllter Anforderung möglich.
+        </p>
+      </div>
+
+      {/* Dropzone / picker */}
+      <div className="mt-4">
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/jpeg,image/png"
+          className="hidden"
+          onChange={(e) => handleFile(e.target.files?.[0])}
+        />
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="flex w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-navy/25 bg-white px-4 py-8 text-center transition-colors hover:border-navy/40 hover:bg-navy/[0.02]"
+        >
+          <span className="text-[14px] font-medium text-navy">Bild auswählen</span>
+          <span className="text-[12px] text-muted">JPG/PNG · min. {HERO_REQ.minWidth}px breit</span>
+        </button>
+      </div>
+
+      {/* Feedback */}
+      {result && !result.ok && (
+        <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700">
+          ✕ {result.reason}
+        </p>
+      )}
+      {result?.ok && (
+        <div className="mt-3">
+          <p className="rounded-lg bg-brand-green/10 px-3 py-2 text-[13px] font-medium text-brand-green">
+            ✓ {fileName} · {result.width}×{result.height} px — Anforderung erfüllt
+          </p>
+          {preview && (
+            <div className="mt-3 aspect-[21/9] overflow-hidden rounded-xl bg-line">
+              <img src={preview} alt="Vorschau" className="h-full w-full object-cover" />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Upload action — gated on a valid file */}
+      <button
+        type="button"
+        disabled={!valid}
+        onClick={() => valid && alert("Bild würde jetzt hochgeladen (Backend-Anbindung folgt).")}
+        className={`mt-4 w-full rounded-xl px-4 py-2.5 text-[14px] font-medium transition-colors ${
+          valid ? "bg-navy text-white hover:bg-navy-dark" : "cursor-not-allowed bg-navy/20 text-white/70"
+        }`}
+      >
+        Hochladen
+      </button>
+    </div>
+  );
+}
