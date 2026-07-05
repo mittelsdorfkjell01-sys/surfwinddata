@@ -146,6 +146,14 @@ export const FoodIcon = (p: IconProps) => (
   </svg>
 );
 
+/** Facility: camping — a simple tent. */
+export const CampingIcon = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <path d="M12 4 3 20h18L12 4Z" />
+    <path d="M12 4v16" />
+  </svg>
+);
+
 /** Community tip — an opening quotation mark. */
 export const QuoteIcon = (p: IconProps) => (
   <svg {...base} {...p} fill="currentColor" stroke="none">

@@ -45,8 +45,52 @@ def test_spatial_indexes_exist(db):
     for expected in {
         "ix_spots_location",
         "ix_spots_sports",
+        "ix_spots_style",
         "ix_spots_region_status",
         "ix_spots_water_level",
         "ix_regions_center",
     }:
         assert expected in names
+
+
+def test_category_columns_present(db):
+    cols = db.execute(
+        text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'spots' "
+            "AND column_name IN ('water_character', 'style', 'facilities')"
+        )
+    ).scalars().all()
+    assert {"water_character", "style", "facilities"} == set(cols)
+
+
+def test_migration_0003_down_and_up(db):
+    """The category migration reverses cleanly and re-applies (up→down→up)."""
+    from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config
+
+    root = Path(__file__).resolve().parents[1]
+    cfg = Config(str(root / "alembic.ini"))
+    cfg.set_main_option("script_location", str(root / "alembic"))
+    url = db.get_bind().engine.url.render_as_string(hide_password=False)
+    cfg.set_main_option("sqlalchemy.url", url)
+
+    def cols() -> set[str]:
+        return set(
+            db.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='spots' AND column_name IN "
+                    "('water_character','style','facilities')"
+                )
+            ).scalars().all()
+        )
+
+    command.downgrade(cfg, "0002_era5_raw_path")
+    db.commit()
+    assert cols() == set()  # columns gone
+    command.upgrade(cfg, "head")
+    db.commit()
+    assert len(cols()) == 3  # and back

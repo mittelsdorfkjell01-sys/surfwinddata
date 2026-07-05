@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.admin.constants import LEVELS as _LEVELS
 from app.scoring.context import primary_sport
 from app.scoring.params import SCORING_PARAMS_V1, get_params
 from app.similarity.orientation import (
@@ -27,7 +28,6 @@ _WEIGHTS = {
     "orientation": 0.30,
 }
 
-_LEVELS = ("beginner", "intermediate", "advanced", "pro")
 _WIND_RANGE_SCALE_KT = 30.0  # full-scale difference for the wind-range component
 
 

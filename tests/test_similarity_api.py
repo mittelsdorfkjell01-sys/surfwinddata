@@ -29,15 +29,17 @@ def _seeded(_migrated_db):
     db = SessionLocal()
     try:
         seed(db)
-        # Baltic flatwater spots share a S-SW usable window (sector 9) and run
-        # in summer; give them climatology so similar/alternatives have data.
-        for slug, weeks in {
+        targets = {
             "laboe": set(range(20, 35)),
             "stein": set(range(20, 35)),
             "schilksee": set(range(20, 35)),
-        }.items():
-            spot = db.scalar(select(Spot).where(Spot.slug == slug))
-            spot.climatology = _kite_clim(weeks)
+        }
+        # This module asserts on the exact set of "running" alternatives, so it
+        # must own the full climatology picture. Earlier modules (scoring/open-
+        # axes) leave synthetic climatology on shared seed spots in the session
+        # DB; clear every non-target spot so only our three have data.
+        for spot in db.scalars(select(Spot)).all():
+            spot.climatology = _kite_clim(targets[spot.slug]) if spot.slug in targets else None
         db.commit()
     finally:
         db.close()

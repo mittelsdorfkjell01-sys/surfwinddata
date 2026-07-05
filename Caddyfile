@@ -1,0 +1,12 @@
+# Reverse proxy + automatic HTTPS for the API. The frontend is hosted separately
+# (static host), so this domain serves only the API (e.g. api.example.com).
+#
+# ${DOMAIN} is read from .env.prod. Caddy provisions a Let's Encrypt certificate
+# automatically ON THE FIRST REQUEST — this REQUIRES a DNS A-record for ${DOMAIN}
+# pointing at the VPS public IP to exist *before* the first request, and ports
+# 80 + 443 reachable from the internet. Without the A-record, certificate
+# issuance fails and Caddy serves nothing.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:8000
+}

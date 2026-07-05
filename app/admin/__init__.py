@@ -24,6 +24,7 @@ from app.admin.spots import (
     revert_override,
     set_spot_live,
     spot_effective_view,
+    update_spot,
     update_spot_metadata,
 )
 
@@ -32,6 +33,7 @@ __all__ = [
     "STATUS_DRAFT",
     "STATUS_LIVE",
     "create_spot",
+    "update_spot",
     "update_spot_metadata",
     "override_auto_field",
     "revert_override",

@@ -17,6 +17,11 @@ REQUIRED_FIELDS_V1: list[dict] = [
     {"entity": "spot", "field": "water_type", "applies_when": None, "severity": "required"},
     {"entity": "spot", "field": "bottom_type", "applies_when": None, "severity": "required"},
     {"entity": "spot", "field": "level", "applies_when": None, "severity": "required"},
+    {"entity": "spot", "field": "water_character", "applies_when": None, "severity": "required"},
+    # Category/facility hints — surfaced in the checklist but never block "live"
+    # (a spot with unknown facilities must still be publishable).
+    {"entity": "spot", "field": "style", "applies_when": None, "severity": "recommended"},
+    {"entity": "spot", "field": "facilities", "applies_when": None, "severity": "recommended"},
     {"entity": "spot", "field": "editorial.description", "applies_when": None, "severity": "required"},
     {
         "entity": "spot",

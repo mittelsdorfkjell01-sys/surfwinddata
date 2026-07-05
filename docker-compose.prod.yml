@@ -1,0 +1,103 @@
+# Production stack for a single VPS (Docker Compose). Run with:
+#
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+#
+# The --env-file flag makes the ${...} values below resolve from .env.prod (for
+# compose interpolation), while `env_file:` passes each service its own vars.
+# Same postgis/redis images as the dev compose. Nothing but Caddy publishes a
+# port; app/db/redis talk over the internal network only.
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Pure cache: no persistence needed (entries rebuild from Open-Meteo).
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    environment:
+      # Built from the individual POSTGRES_* so the password lives in exactly one
+      # place; host is the compose service name.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - media:/app/data/media
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=4).status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    env_file:
+      - .env.prod
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        # Caddy only starts routing once the app is healthy (migrations applied,
+        # DB reachable) — a failed migration keeps the new app unhealthy.
+        condition: service_healthy
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      RETENTION_DAYS: "14"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # ./backups is a HOST bind mount — survives `docker compose down -v`.
+      - ./backups:/backups
+      - media:/media:ro
+      - ./scripts/backup.sh:/usr/local/bin/backup.sh:ro
+    # One backup at start, then every 24h. `|| true` keeps the loop alive if a
+    # single run fails (restart policy covers a hard crash).
+    entrypoint: ["/bin/sh", "-c", "while true; do sh /usr/local/bin/backup.sh || echo '[backup] run FAILED'; sleep 86400; done"]
+
+volumes:
+  pgdata:
+  media:
+  caddy_data:
+  caddy_config:

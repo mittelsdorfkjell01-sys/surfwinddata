@@ -9,7 +9,14 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.admin.audit import record_audit
-from app.admin.constants import STATUS_DRAFT, STATUS_LIVE
+from app.admin.constants import (
+    STATUS_DRAFT,
+    STATUS_LIVE,
+    validate_facilities,
+    validate_level,
+    validate_styles,
+    validate_water_character,
+)
 from app.admin.readiness import validate_spot_readiness
 from app.services.overrides import (
     OVERRIDABLE_FIELDS,
@@ -68,6 +75,12 @@ def create_spot(
     editorial = dict(defaults.get("spot_template") or {})
     editorial.update(data.get("editorial") or {})
 
+    # Enforce the controlled category vocabularies (ValueError -> 422 at the API).
+    level = validate_level(data.get("level"))
+    water_character = validate_water_character(data.get("water_character"))
+    style = validate_styles(data.get("style"))
+    facilities = validate_facilities(data.get("facilities"))
+
     spot = Spot(
         slug=data.get("slug") or _slugify(data["name"]),
         name=data["name"],
@@ -76,7 +89,10 @@ def create_spot(
         sports=data.get("sports") or [],
         water_type=data.get("water_type"),
         bottom_type=data.get("bottom_type"),
-        level=data.get("level"),
+        level=level,
+        water_character=water_character,
+        style=style,
+        facilities=facilities,
         facing=data.get("facing"),
         model_pref=data.get("model_pref") or defaults.get("model_pref"),
         editorial=editorial or None,
@@ -97,6 +113,51 @@ def create_spot(
             trigger_era5_job(spot.id, db=db, client=client)
         except Exception:
             db.rollback()
+    return spot
+
+
+def update_spot(
+    spot_id, data: dict, *, db: Session, actor: str | None = "admin"
+) -> Any:
+    """Patch a spot's editorial/structural columns. Only keys present in ``data``
+    are touched (so ``None`` means "clear", absent means "leave as is").
+
+    Category axes are validated against the controlled vocabularies; an invalid
+    value raises ``ValueError`` (→ 422 at the API). ``editorial`` is *merged*, so
+    a partial editorial patch keeps untouched keys.
+    """
+    spot = _load(db, spot_id)
+
+    if "name" in data and data["name"]:
+        spot.name = data["name"]
+    if "slug" in data and data["slug"]:
+        spot.slug = data["slug"]
+    if "sports" in data and data["sports"] is not None:
+        spot.sports = list(data["sports"])
+    for col in ("water_type", "bottom_type", "model_pref"):
+        if col in data:
+            setattr(spot, col, data[col])
+    if "facing" in data:
+        spot.facing = data["facing"]
+    if "level" in data:
+        spot.level = validate_level(data["level"])
+    if "water_character" in data:
+        spot.water_character = validate_water_character(data["water_character"])
+    if "style" in data:
+        spot.style = validate_styles(data["style"])
+    if "facilities" in data:
+        spot.facilities = validate_facilities(data["facilities"])
+    if "editorial" in data and data["editorial"] is not None:
+        merged = dict(spot.editorial or {})
+        for key, value in data["editorial"].items():
+            if key in ("wind_danger", "hazards"):
+                continue
+            merged[key] = value
+        spot.editorial = merged or None
+
+    record_audit(db, spot.id, "update", {"fields": sorted(data)}, actor)
+    db.commit()
+    db.refresh(spot)
     return spot
 
 

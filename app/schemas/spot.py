@@ -26,6 +26,9 @@ class SpotSummary(BaseModel):
     water_type: str | None = None
     bottom_type: str | None = None
     level: str | None = None
+    water_character: str | None = None
+    style: list[str] = []
+    facilities: dict[str, Any] | None = None
     status: str
     confidence: float | None = None
     facing: int | None = None
@@ -43,6 +46,9 @@ class SpotSummary(BaseModel):
             water_type=spot.water_type,
             bottom_type=spot.bottom_type,
             level=spot.level,
+            water_character=spot.water_character,
+            style=list(spot.style or []),
+            facilities=spot.facilities,
             status=spot.status,
             confidence=spot.confidence,
             facing=spot.facing,
@@ -64,6 +70,9 @@ class SpotRead(BaseModel):
     water_type: str | None = None
     bottom_type: str | None = None
     level: str | None = None
+    water_character: str | None = None
+    style: list[str] = []
+    facilities: dict[str, Any] | None = None
     status: str
     confidence: float | None = None
     facing: int | None = None
@@ -89,6 +98,9 @@ class SpotRead(BaseModel):
             water_type=spot.water_type,
             bottom_type=spot.bottom_type,
             level=spot.level,
+            water_character=spot.water_character,
+            style=list(spot.style or []),
+            facilities=spot.facilities,
             status=spot.status,
             confidence=spot.confidence,
             facing=spot.facing,

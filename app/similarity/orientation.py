@@ -10,7 +10,7 @@ so mirrored coasts collapse onto the same pattern.
 from __future__ import annotations
 
 from app.era5.bins import N_SECTORS, SECTOR_WIDTH_DEG
-from app.scoring.geometry import direction_in_windows
+from app.scoring.geometry import direction_in_windows, valid_windows
 
 # Pattern buckets, by the folded offset (0..180) between wind bearing and facing.
 ORIENTATION_CATEGORIES = (
@@ -44,9 +44,14 @@ def window_to_sectors(windows) -> list[int]:
         return []
     if isinstance(windows, list) and windows and isinstance(windows[0], int):
         return [s % N_SECTORS for s in windows]
+    # A dict window or list of window dicts. Anything else (e.g. the "n/a"
+    # sentinel string, an empty/malformed dict) means "no known sectors".
+    valid = valid_windows(windows)
+    if not valid:
+        return []
     return [
         s for s in range(N_SECTORS)
-        if direction_in_windows(s * SECTOR_WIDTH_DEG, windows)
+        if direction_in_windows(s * SECTOR_WIDTH_DEG, valid)
     ]
 
 

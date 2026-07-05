@@ -70,8 +70,6 @@ export default function ImageUpload({ onAccept }: { onAccept?: (file: File) => v
     }
   };
 
-  const valid = result?.ok === true;
-
   return (
     <div className="rounded-2xl bg-[#F1F5FA] p-6">
       {/* Disclaimer */}
@@ -125,18 +123,6 @@ export default function ImageUpload({ onAccept }: { onAccept?: (file: File) => v
           )}
         </div>
       )}
-
-      {/* Upload action — gated on a valid file */}
-      <button
-        type="button"
-        disabled={!valid}
-        onClick={() => valid && alert("Bild würde jetzt hochgeladen (Backend-Anbindung folgt).")}
-        className={`mt-4 w-full rounded-xl px-4 py-2.5 text-[14px] font-medium transition-colors ${
-          valid ? "bg-navy text-white hover:bg-navy-dark" : "cursor-not-allowed bg-navy/20 text-white/70"
-        }`}
-      >
-        Hochladen
-      </button>
     </div>
   );
 }

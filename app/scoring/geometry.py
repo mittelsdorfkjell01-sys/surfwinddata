@@ -17,15 +17,30 @@ def _in_window(deg: float, window: dict) -> bool:
     return deg >= lo or deg <= hi  # wraps through 0/360
 
 
+def valid_windows(windows) -> list[dict]:
+    """Keep only well-formed ``{"min","max"}`` window dicts.
+
+    Curators may set the sentinel ``"n/a"`` (or leave junk) on
+    ``usable_wind_directions``; treating that as *no constraint* rather than
+    crashing keeps scoring/similarity robust.
+    """
+    if isinstance(windows, dict):
+        windows = [windows]
+    if not isinstance(windows, (list, tuple)):
+        return []
+    return [w for w in windows if isinstance(w, dict) and "min" in w and "max" in w]
+
+
 def direction_in_windows(deg: float | None, windows) -> bool:
-    """True if ``deg`` falls in any usable window. ``None`` windows => all usable."""
+    """True if ``deg`` falls in any usable window. ``None``/absent windows => all usable."""
     if windows is None:
         return True
     if deg is None:
         return True  # unknown direction can't fail a direction gate
-    if isinstance(windows, dict):
-        windows = [windows]
-    return any(_in_window(deg, w) for w in windows)
+    valid = valid_windows(windows)
+    if not valid:
+        return True  # no usable constraint (e.g. "n/a") => not gated out
+    return any(_in_window(deg, w) for w in valid)
 
 
 def is_strong_onshore(

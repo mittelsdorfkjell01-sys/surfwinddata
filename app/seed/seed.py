@@ -3,7 +3,9 @@
 Run with:  python -m app.seed.seed
 
 Inserts the regions and spots from ``data.py``. Existing rows (matched by slug)
-are left untouched, so the command is safe to re-run.
+are left untouched, so the command is safe to re-run. The CLI additionally loads
+the researched European draft batch (``data_europe.py``); ``seed(db)`` without the
+flag stays on the small core catalogue so tests remain small and deterministic.
 """
 
 from geoalchemy2.shape import from_shape
@@ -25,15 +27,28 @@ def _polygon(ring: list[tuple[float, float]]):
     return from_shape(Polygon(ring), srid=4326)
 
 
-def seed(db: Session) -> dict[str, int]:
-    """Seed regions, spots, scoring_params and required_fields. Counts of new rows."""
+def seed(db: Session, *, include_europe: bool = False) -> dict[str, int]:
+    """Seed regions, spots, scoring_params and required_fields. Counts of new rows.
+
+    ``include_europe`` also loads the researched European draft batch
+    (``app/seed/data_europe.py``). Off by default so the test catalogue stays
+    small; the seed CLI turns it on.
+    """
     from app.admin.readiness import seed_required_fields
     from app.scoring.params import seed_scoring_params
+
+    regions = list(REGIONS)
+    spots = list(SPOTS)
+    if include_europe:
+        from app.seed.data_europe import REGIONS as EU_REGIONS, SPOTS as EU_SPOTS
+
+        regions = regions + EU_REGIONS
+        spots = spots + EU_SPOTS
 
     created = {"regions": 0, "spots": 0, "scoring_params": 0, "required_fields": 0}
 
     region_by_slug: dict[str, Region] = {}
-    for r in REGIONS:
+    for r in regions:
         existing = db.scalar(select(Region).where(Region.slug == r["slug"]))
         if existing is not None:
             region_by_slug[r["slug"]] = existing
@@ -55,7 +70,7 @@ def seed(db: Session) -> dict[str, int]:
 
     db.flush()  # assign region ids before linking spots
 
-    for s in SPOTS:
+    for s in spots:
         existing = db.scalar(select(Spot).where(Spot.slug == s["slug"]))
         if existing is not None:
             continue
@@ -69,6 +84,9 @@ def seed(db: Session) -> dict[str, int]:
             water_type=s["water_type"],
             bottom_type=s["bottom_type"],
             level=s["level"],
+            water_character=s.get("water_character"),
+            style=s.get("style", []),
+            facilities=s.get("facilities"),
             status=s["status"],
             facing=s.get("facing"),
             confidence=s.get("confidence"),
@@ -87,7 +105,7 @@ def seed(db: Session) -> dict[str, int]:
 def main() -> None:
     db = SessionLocal()
     try:
-        created = seed(db)
+        created = seed(db, include_europe=True)
     finally:
         db.close()
     print(

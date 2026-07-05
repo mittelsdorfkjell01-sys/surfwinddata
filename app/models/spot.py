@@ -41,7 +41,18 @@ class Spot(Base, TimestampMixin):
     )
     water_type: Mapped[str | None] = mapped_column(String(30))   # ocean | sea | lake | lagoon
     bottom_type: Mapped[str | None] = mapped_column(String(30))  # sand | rock | reef | mixed
-    level: Mapped[str | None] = mapped_column(String(30))        # beginner | intermediate | advanced
+    level: Mapped[str | None] = mapped_column(String(30))        # beginner | intermediate | advanced | pro
+
+    # Category axes (validated against app.admin.constants). Wasserart — distinct
+    # from water_type: flach | chop | welle_klein | welle_gross | tiefes_wasser.
+    water_character: Mapped[str | None] = mapped_column(String(30))
+    # Fahrstil (multi-select): freeride | freestyle | big_air | wave_riding.
+    style: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, server_default=text("'{}'::varchar[]")
+    )
+    # Facilities: {kind: {"available": bool, "note"?: str}}; a missing kind =
+    # "unknown" (frontend hides it). Kinds: parking|shower|food|camping|school.
+    facilities: Mapped[dict | None] = mapped_column(JSONB)
 
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default=text("'draft'")
@@ -61,6 +72,7 @@ class Spot(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_spots_location", "location", postgresql_using="gist"),
         Index("ix_spots_sports", "sports", postgresql_using="gin"),
+        Index("ix_spots_style", "style", postgresql_using="gin"),
         Index("ix_spots_region_status", "region_id", "status"),
         Index("ix_spots_water_level", "water_type", "level"),
     )

@@ -1,4 +1,4 @@
-import type { RegionMonth } from "../data/regionDetail";
+import type { RegionMonth } from "../lib/types";
 
 /**
  * "Wann hinfahren" — the region's core answer. Each month is a bar whose height

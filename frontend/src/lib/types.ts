@@ -1,0 +1,122 @@
+// Shared view-model types + small pure helpers. These used to live in
+// src/data/*.ts alongside mock data; the mock data is gone (all pages read the
+// API now), the types stay.
+
+import type { FacilityMap } from "./api";
+
+// --- spot / region view models ---------------------------------------------
+
+export type TagKind = "wave" | "level" | "water";
+export interface Tag {
+  label: string;
+  kind: TagKind;
+}
+
+export interface Spot {
+  id: string;
+  name: string;
+  region: string;
+  wind: number; // kts (typical / current)
+  favorite?: boolean;
+  tags: Tag[];
+  image: string; // "" = no image → branded fallback
+  hero?: string;
+  coords?: [number, number]; // [lat, lng]
+  windDir?: number; // degrees the wind comes FROM
+  waveDir?: number;
+  coast?: number;
+
+  // populated from the backend
+  uuid?: string;
+  slug?: string;
+  regionId?: string;
+  sports?: string[];
+  description?: string;
+  level?: string | null;
+  waterCharacter?: string | null;
+  style?: string[];
+  facilities?: FacilityMap | null;
+  /** Derived 52-week climatology (from the detail record); null when not derived. */
+  climatology?: Record<string, any> | null;
+}
+
+export interface RegionInfo {
+  slug: string;
+  name: string;
+  country: string;
+  spots: Spot[];
+  center: [number, number];
+}
+
+// --- spot-detail panel types ------------------------------------------------
+
+export type FacilityKind = "parking" | "school" | "shower" | "food" | "camping";
+export interface Facility {
+  kind: FacilityKind;
+  title: string;
+  note: string;
+  /** false = demonstrably not present (shown muted). undefined = present. */
+  available?: boolean;
+}
+
+export interface Tip {
+  author: string;
+  text: string;
+}
+
+/** One column of the 7-day forecast. */
+export interface ForecastDay {
+  day: string; // MON…SUN
+  wind: number; // kts
+  windDir: number; // degrees the wind comes FROM
+  wave: number; // metres
+  good?: boolean;
+}
+
+/** A month's mean wind, one value per week. */
+export interface MonthWind {
+  month: string; // JAN…DEZ
+  weeks: number[];
+}
+
+/** "Right now" readings for the live strip. */
+export interface LiveConditions {
+  wind: number;
+  gust: number;
+  windDir: number;
+  wave: number;
+  period: number;
+  waterTemp: number;
+  airTemp: number;
+}
+
+export interface SpotFact {
+  label: string;
+  value: string;
+}
+
+/** Water character — drives the wave animation on the spot map. */
+export type WaterType = "flat" | "chop" | "swell";
+
+/** One month of the region-season chart. */
+export interface RegionMonth {
+  month: string;
+  working: number;
+  total: number;
+  wind: number;
+}
+
+// --- helpers ---------------------------------------------------------------
+
+const slugify = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+/** Slug for the region a spot belongs to, e.g. "Sardinien, Italien" → "sardinien". */
+export const regionSlug = (region: string) => slugify(region.split(",")[0]);

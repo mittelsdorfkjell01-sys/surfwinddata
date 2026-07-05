@@ -1,4 +1,4 @@
-import type { SpotFact } from "../data/spotDetail";
+import type { SpotFact } from "../lib/types";
 
 /** "Spot-Steckbrief" — a compact key/value character sheet for the sidebar. */
 export default function SpotFacts({ facts }: { facts: SpotFact[] }) {

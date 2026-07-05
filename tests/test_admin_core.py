@@ -22,6 +22,7 @@ _IMAGE = {"url": "u", "source": "unsplash", "license": "Unsplash License", "cred
 def _spot(**kw):
     base = dict(
         sports=["kitesurf"], water_type="sea", bottom_type="sand", level="beginner",
+        water_character="chop", style=[], facilities=None,
         facing=45, editorial=None, climatology=None, image=None, overrides=None,
         name="X", model_pref=None, confidence=None,
     )

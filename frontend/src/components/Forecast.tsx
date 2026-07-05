@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ForecastDay } from "../data/spotDetail";
+import type { ForecastDay } from "../lib/types";
 import { ChevronDownIcon } from "../lib/icons";
 
 type WindUnit = "kts" | "ms" | "kmh";

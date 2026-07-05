@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 from geoalchemy2.shape import to_shape
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.era5 import cds, pipeline
 from app.era5.bins import N_WEEKS
@@ -24,7 +24,19 @@ def spot(db):
     seed(db)
     s = db.scalar(select(Spot).where(Spot.slug == "tarifa-los-lances"))
     assert s is not None
-    return s
+
+    def _reset():
+        # The job is idempotent per spot, so a 'derived' job left behind would be
+        # reused (never restarting at 'queued'); and leftover climatology on this
+        # seed spot would leak into other modules (e.g. similarity alternatives).
+        db.execute(delete(Era5Job).where(Era5Job.spot_id == s.id))
+        s.climatology = None
+        s.overrides = None
+        db.commit()
+
+    _reset()          # clean slate before the test
+    yield s
+    _reset()          # and don't leak into later modules
 
 
 @pytest.fixture

@@ -1,14 +1,16 @@
 import SpotCard from "./SpotCard";
-import { allSpots, type Spot } from "../data/spots";
+import type { Spot } from "../lib/types";
+import { useSpots } from "../lib/hooks";
 
 /**
- * "Ähnliche Spots" — spots that resemble the current one. Placeholder ranking:
- * same region first, then closest wind strength; the real similarity ranking
- * comes from the backend (Sprint 7). Reuses the landing SpotCard for a
- * consistent look.
+ * "Ähnliche Spots" — spots that resemble the current one, drawn from the live
+ * catalogue (no mock data / picsum). Placeholder ranking: same region first,
+ * then closest wind strength; the real similarity ranking comes from the backend
+ * similarity endpoints in a later step. Reuses the landing SpotCard.
  */
 export default function SimilarSpots({ spot, limit = 4 }: { spot: Spot; limit?: number }) {
-  const others = allSpots.filter((s) => s.id !== spot.id);
+  const { data: all } = useSpots({ status: "published" });
+  const others = (all ?? []).filter((s) => s.id !== spot.id);
   const sameRegion = spot.region.split(",")[0].trim();
 
   const ranked = others

@@ -1,6 +1,15 @@
-"""Shared admin constants."""
+"""Shared admin constants.
+
+Also the **single source of truth** for the controlled category vocabularies
+(``LEVELS``, ``WATER_CHARACTERS``, ``STYLES``, ``FACILITY_KINDS``). Enum keys are
+English/machine-readable and stable; German display labels live only in the
+frontend (``frontend/src/lib/labels.ts``). Anything that needs to validate one of
+these axes imports from here rather than keeping its own copy.
+"""
 
 from __future__ import annotations
+
+from typing import Iterable
 
 # Sentinel a curator sets when a field genuinely does not apply; it counts as
 # *fulfilled* for readiness (an explicit "not applicable", not a missing value).
@@ -13,5 +22,90 @@ STATUS_LIVE = "published"    # live
 STATUS_ARCHIVED = "archived"
 
 
+# --- controlled category vocabularies (single source of truth) -------------
+
+# Rider level (ordered — low → high; ``similarity.character`` relies on order).
+LEVELS: tuple[str, ...] = ("beginner", "intermediate", "advanced", "pro")
+
+# Water character ("Wasserart") — distinct from ``water_type`` (ocean/sea/lake).
+WATER_CHARACTERS: tuple[str, ...] = (
+    "flach", "chop", "welle_klein", "welle_gross", "tiefes_wasser",
+)
+
+# Riding style ("Fahrstil") — multi-select.
+STYLES: tuple[str, ...] = ("freeride", "freestyle", "big_air", "wave_riding")
+
+# Facility kinds — exactly these five.
+FACILITY_KINDS: tuple[str, ...] = ("parking", "shower", "food", "camping", "school")
+
+
 def is_na(value) -> bool:
     return isinstance(value, str) and value.strip().lower() == NA
+
+
+# --- enum validation -------------------------------------------------------
+
+def validate_level(value: str | None) -> str | None:
+    """A single ``level`` key, ``"n/a"``, or ``None`` (unknown). Else ``ValueError``."""
+    if value is None or is_na(value):
+        return value
+    if value not in LEVELS:
+        raise ValueError(f"invalid level {value!r}; allowed: {list(LEVELS)}")
+    return value
+
+
+def validate_water_character(value: str | None) -> str | None:
+    """A single ``water_character`` key, ``"n/a"``, or ``None``. Else ``ValueError``."""
+    if value is None or is_na(value):
+        return value
+    if value not in WATER_CHARACTERS:
+        raise ValueError(
+            f"invalid water_character {value!r}; allowed: {list(WATER_CHARACTERS)}"
+        )
+    return value
+
+
+def validate_styles(values: Iterable[str] | None) -> list[str]:
+    """Normalise a ``style`` multi-select: unique, order-preserved, all valid keys."""
+    if not values:
+        return []
+    if isinstance(values, str):
+        raise ValueError("style must be a list of keys, not a string")
+    out: list[str] = []
+    for v in values:
+        if v not in STYLES:
+            raise ValueError(f"invalid style {v!r}; allowed: {list(STYLES)}")
+        if v not in out:
+            out.append(v)
+    return out
+
+
+def validate_facilities(value: dict | None) -> dict | None:
+    """Validate the ``facilities`` JSONB blob.
+
+    Structure is ``{kind: {"available": bool, "note"?: str}}``. Only the five
+    known kinds are allowed; a *missing* kind means "unknown" (the frontend hides
+    those rows), so we never inject defaults. ``None``/empty stays ``None``.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("facilities must be an object")
+    cleaned: dict[str, dict] = {}
+    for kind, spec in value.items():
+        if kind not in FACILITY_KINDS:
+            raise ValueError(
+                f"invalid facility {kind!r}; allowed: {list(FACILITY_KINDS)}"
+            )
+        if not isinstance(spec, dict) or "available" not in spec:
+            raise ValueError(f"facility {kind!r} needs an 'available' boolean")
+        entry: dict = {"available": bool(spec["available"])}
+        note = spec.get("note")
+        if note is not None:
+            if not isinstance(note, str):
+                raise ValueError(f"facility {kind!r} note must be a string")
+            note = note.strip()
+            if note:
+                entry["note"] = note
+        cleaned[kind] = entry
+    return cleaned or None

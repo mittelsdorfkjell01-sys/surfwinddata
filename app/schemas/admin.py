@@ -5,7 +5,14 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.admin.constants import (
+    validate_facilities,
+    validate_level,
+    validate_styles,
+    validate_water_character,
+)
 
 
 class SpotCreate(BaseModel):
@@ -18,12 +25,51 @@ class SpotCreate(BaseModel):
     water_type: str | None = None
     bottom_type: str | None = None
     level: str | None = None
+    water_character: str | None = None
+    style: list[str] = Field(default_factory=list)
+    facilities: dict[str, Any] | None = None
     facing: int | None = Field(default=None, ge=0, le=359)
     model_pref: str | None = None
     editorial: dict[str, Any] | None = None
 
+    _v_level = field_validator("level")(staticmethod(validate_level))
+    _v_water = field_validator("water_character")(
+        staticmethod(validate_water_character)
+    )
+    _v_style = field_validator("style")(staticmethod(validate_styles))
+    _v_fac = field_validator("facilities")(staticmethod(validate_facilities))
+
     def to_data(self) -> dict:
         return self.model_dump(exclude_none=False)
+
+
+class SpotUpdate(BaseModel):
+    """Partial spot update. Only fields *set* on the request are applied, so a
+    caller can clear a value (send ``null``) without touching the others."""
+
+    name: str | None = None
+    slug: str | None = None
+    sports: list[str] | None = None
+    water_type: str | None = None
+    bottom_type: str | None = None
+    level: str | None = None
+    water_character: str | None = None
+    style: list[str] | None = None
+    facilities: dict[str, Any] | None = None
+    facing: int | None = Field(default=None, ge=0, le=359)
+    model_pref: str | None = None
+    editorial: dict[str, Any] | None = None
+
+    _v_level = field_validator("level")(staticmethod(validate_level))
+    _v_water = field_validator("water_character")(
+        staticmethod(validate_water_character)
+    )
+    _v_style = field_validator("style")(staticmethod(validate_styles))
+    _v_fac = field_validator("facilities")(staticmethod(validate_facilities))
+
+    def to_data(self) -> dict:
+        """Only the fields the client actually sent (so absent ≠ null-clear)."""
+        return self.model_dump(exclude_unset=True)
 
 
 class MetadataUpdate(BaseModel):

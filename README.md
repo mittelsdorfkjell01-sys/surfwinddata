@@ -36,11 +36,14 @@ app/
   models/              # SQLAlchemy models (8 tables)
   schemas/             # Pydantic read schemas (+ geo helpers)
   services/overrides.py# apply_overrides() read-overlay helper
-  api/                 # FastAPI routers: spots, regions
+  admin/constants.py   # single source of truth for the category enums
+  media/               # hero-image validation + on-disk storage (Sprint: upload)
+  api/                 # FastAPI routers: spots, regions, search, admin
   seed/                # seed data + `python -m app.seed.seed`
-  main.py              # FastAPI app
-alembic/               # migration env + versions/0001_initial.py
-tests/                 # migration / seed / API / geo tests
+  main.py              # FastAPI app (+ CORS + /media StaticFiles)
+alembic/               # migration env + versions/ (0001 … 0003_spot_categories)
+tests/                 # migration / seed / API / geo / categories / upload tests
+frontend/              # React + Vite + Tailwind SPA (wired to the API)
 docker-compose.yml     # postgis + redis
 scripts/init-test-db.sql
 ```
@@ -73,6 +76,9 @@ scripts/init-test-db.sql
    | `DATABASE_URL`      | `postgresql+psycopg://surf:surf@localhost:5432/surfwind`       |
    | `TEST_DATABASE_URL` | `postgresql+psycopg://surf:surf@localhost:5432/surfwind_test`  |
    | `REDIS_URL`         | `redis://localhost:6379/0`                                     |
+   | `CORS_ORIGINS`      | `http://localhost:5173` (comma-separated or JSON array)        |
+   | `MEDIA_DIR`         | `data/media` (uploaded hero images on disk)                    |
+   | `MEDIA_URL_PREFIX`  | `/media` (StaticFiles mount serving `MEDIA_DIR`)               |
 
 4. **Run the migration** (creates PostGIS + all tables/indexes):
 
@@ -82,12 +88,30 @@ scripts/init-test-db.sql
 
 ## Seed
 
-Inserts 2 regions (Tarifa, Sardinia) and 6 spots with coordinates and sports.
-Idempotent — safe to re-run (existing slugs are skipped):
+The **core** catalogue (`app/seed/data.py`) is 3 regions (Tarifa, Sardinia, Kieler
+Bucht) and 11 **published** spots with coordinates, sports, and — where genuinely
+known — the category axes (`water_character`, `style`) and `facilities` (e.g. Laboe,
+Porto Pollo, Fehmarn). This is what the tests seed.
+
+The seed **CLI** additionally loads a researched **European draft batch**
+(`app/seed/data_europe.py`): 25 more regions and 40 more spots (20 wind + 20 wave —
+Canaries, Aegean, Portugal, N-Spain, France, Ireland, UK). These are all
+`status="draft"`, so they are **not public** (the frontend shows only `published`)
+until a curator reviews and publishes them (readiness also needs a derived
+climatology + credited image). Their `usable_wind_directions` are authored as
+8-point compass letters and normalised to 45°, wrap-aware `{min,max}` windows so the
+scoring/similarity engine consumes them natively.
+
+Idempotent — safe to re-run (existing slugs are skipped; note it does **not**
+back-fill new columns onto rows that already exist, so drop/re-seed a dev DB to pick
+up added fields):
 
 ```bash
-python -m app.seed.seed
+python -m app.seed.seed          # core + European draft batch (28 regions, 51 spots)
 ```
+
+`seed(db)` called directly (e.g. in tests) loads the core only; pass
+`seed(db, include_europe=True)` for the full batch.
 
 ## Run the API
 
@@ -99,7 +123,7 @@ Read-only endpoints (interactive docs at `/docs`):
 
 | Method & path        | Description                                              |
 | -------------------- | ------------------------------------------------------- |
-| `GET /spots`              | List spots; filters: `region_id`, `status`, `sport`     |
+| `GET /spots`              | List spots; filters: `region_id`, `status`, `sport`, `level`, `water_character`, `style` (multi) |
 | `GET /spots/{id}`         | Single spot (404 if unknown)                            |
 | `GET /spots/{id}/live`    | Current conditions (Open-Meteo, cached) — Sprint 3      |
 | `GET /spots/{id}/forecast`| 7-day forecast + per-day confidence; `days` 1–7 — Sprint 3 |
@@ -117,9 +141,10 @@ Read-only endpoints (interactive docs at `/docs`):
 | `GET /regions`            | List regions                                            |
 | `GET /regions/{id}`       | Single region (404 if unknown)                          |
 | `GET /regions/{id}/season`| Region season aggregate (52 weeks) — Sprint 6          |
-| `POST /admin/spots` · `PATCH /admin/spots/{id}` | Create draft / curate editorial — Sprint 8 |
+| `POST /admin/spots` · `PATCH /admin/spots/{id}` | Create draft / update editorial + categories + facilities |
 | `POST /admin/spots/{id}/override` · `/revert`   | Pin / unpin an auto value (provenance + audit) — Sprint 8 |
-| `POST /admin/spots/{id}/image` · `/live` · `GET …/readiness` | Image rights / publish / readiness — Sprint 8 |
+| `POST /admin/spots/{id}/image` (url) · `/image/upload` (file) | Set image by URL / upload a validated hero image |
+| `POST /admin/spots/{id}/live` · `GET …/readiness` | Publish (409 with gaps until ready) / readiness checklist |
 | `POST /admin/regions` · `…/{id}/defaults` · `…/{id}/stock-image` | Region CRUD + stock image — Sprint 8 |
 | `GET /health`             | Liveness probe                                          |
 
@@ -498,6 +523,7 @@ no auth yet: `/admin` is open unless `ADMIN_KEY` is set, then it requires the
 | Function (`app.admin.*`)                  | Responsibility                              |
 | ----------------------------------------- | ------------------------------------------- |
 | `spots.create_spot(data)`                 | draft spot, region-defaults template, ERA5 job |
+| `spots.update_spot(id, data)`             | patch editorial + structural/category columns (validated) |
 | `spots.update_spot_metadata(id, editorial)` | merge editorial (incl. free text); value **or** `n/a` |
 | `spots.override_auto_field(id, field, val)` | pin to `overrides`, keep auto, audit        |
 | `spots.revert_override(id, field)`        | drop the override                           |
@@ -542,6 +568,215 @@ it. Because overrides live in their own column, **`recompute_climatology` (Sprin
 rewrites `spots.climatology` but never touches `spots.overrides`** — a pinned value
 survives a re-derivation. (There is intentionally no `wind_danger`/`hazards`
 field; unusable conditions are simply a `nein`.)
+
+## Categories, facilities, media & frontend
+
+A later phase adds three **validated category axes**, **facilities**, a **hero-image
+upload**, **CORS**, and a **React frontend** wired to the API (replacing the mock
+data). The controlled vocabularies live in one place —
+[`app/admin/constants.py`](app/admin/constants.py) — and are mirrored to German
+display labels on the frontend in
+[`frontend/src/lib/labels.ts`](frontend/src/lib/labels.ts):
+
+| Axis (spot column)  | Keys (English, machine-readable)                                  |
+| ------------------- | ----------------------------------------------------------------- |
+| `level`             | `beginner` · `intermediate` · `advanced` · `pro`                  |
+| `water_character`   | `flach` · `chop` · `welle_klein` · `welle_gross` · `tiefes_wasser`|
+| `style` (multi)     | `freeride` · `freestyle` · `big_air` · `wave_riding`              |
+| `facilities` (keys) | `parking` · `shower` · `food` · `camping` · `school`             |
+
+- **Validation.** Invalid enum values are rejected at both the Pydantic layer and
+  the service layer → **HTTP 422**. `NULL`/empty is always allowed and means
+  *unknown*. `similarity/character.py` imports `LEVELS` from the same constants, so
+  the level vocabulary has a single source of truth.
+- **Readiness.** `water_character` is a **required** field (satisfiable by `"n/a"`);
+  `style` and `facilities` are **recommended** and never block going live — a spot
+  with unknown facilities is publishable.
+- **Facilities semantics.** `facilities` is JSONB, `{kind: {"available": bool,
+  "note"?: str}}`. A **missing** kind means *unknown* and is **hidden** on the spot
+  page; `available: false` renders muted as "nicht vorhanden".
+- **Filtering.** `GET /spots` gains `level`, `water_character`, and a multi-value
+  `style` (array overlap). On the frontend these drive the **"Sortieren & Filtern"**
+  dropdown; the categories are filter/sort data only and are **not** shown as pills
+  on spot cards. They **are** shown in the spot-page "Steckbrief".
+
+### Hero-image upload
+
+`POST /admin/spots/{id}/image/upload` (multipart: `file` + `credit`) re-validates
+the same rules as the frontend gate ([`ImageUpload.tsx`](frontend/src/components/ImageUpload.tsx)
+`HERO_REQ`) **server-side** — min **3840×2000 px**, landscape, JPG/PNG, ≤ **12 MB** —
+in [`app/media/hero.py`](app/media/hero.py). The file is stored under
+`MEDIA_DIR/spots/{id}/hero.<ext>` and served via the `MEDIA_URL_PREFIX` StaticFiles
+mount; the spot image is recorded as `{url, source: "upload", license: "own",
+credit}`. The URL-based `POST /admin/spots/{id}/image` remains as an alternative.
+
+### Frontend
+
+React 18 + Vite + TypeScript + Tailwind + React Router + Leaflet, in
+[`frontend/`](frontend/). The pages fetch live from the API (no more mock spots),
+with loading skeletons and error states:
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local     # VITE_API_URL, default http://localhost:8000
+npm run dev                     # http://localhost:5173
+npm run build                   # type-check + production build
+npm test                        # vitest — filter/sort/adapter/facility-hiding logic
+```
+
+| Route                    | Page                                                       |
+| ------------------------ | ---------------------------------------------------------- |
+| `/`                      | Landing — published spots, sort/filter dropdown            |
+| `/map`                   | Leaflet map of spots                                       |
+| `/spot/:id`              | Spot detail — categories (Steckbrief), facilities, live    |
+| `/region/:slug`          | Region — its spots, sort/filter dropdown                   |
+| `/admin/spot/new`        | **Admin spot form** — full editorial record + image upload |
+| `/admin/spot/:id/edit`   | Admin spot form, pre-filled for editing                    |
+
+The admin form (`AdminSpotForm.tsx`) sets categories and facilities via dropdowns/
+chips (never free-typed tags), uploads the hero image after creating the draft, and
+then shows the readiness checklist (what still blocks "live"). The API base URL is
+`VITE_API_URL`; root-relative image URLs from the API are resolved against it.
+
+The layer split on the frontend: [`lib/api.ts`](frontend/src/lib/api.ts) (typed
+fetch client), [`lib/labels.ts`](frontend/src/lib/labels.ts) (enum → German),
+[`lib/adapt.ts`](frontend/src/lib/adapt.ts) (backend record → view model),
+[`lib/hooks.ts`](frontend/src/lib/hooks.ts) (`useSpots`/`useSpot`/`useSpotLive`),
+and [`lib/filters.ts`](frontend/src/lib/filters.ts) (URL-synced filter/sort state).
+
+## Frontend ↔ Backend
+
+Every page reads the **live API** — there is no mock data (`frontend/src/data/*`
+was removed). Spots/regions come from the DB; the hero search hits `/search`; the
+7-day forecast comes from `/spots/{id}/forecast`; category/facility/season panels
+render real data and **hide** (or show an empty state) when the backend has none.
+
+### The one config point: `VITE_API_URL`
+The backend base URL is configured **only** via `VITE_API_URL` (a Vite build-time
+variable). Nowhere else is it hardcoded (the sole fallback is
+`http://localhost:8000` in `frontend/src/lib/api.ts` for local dev).
+
+- **Local:** `cp frontend/.env.example frontend/.env.local` → `VITE_API_URL=http://localhost:8000`.
+- **Vercel:** set `VITE_API_URL` in the project's Environment Variables to the
+  deployed backend URL (e.g. `https://api.example.com`). Rebuild after changing it.
+- The backend must allow the frontend origin via `CORS_ORIGINS` (Sprint 9).
+
+### Local dev — both services at once
+```bash
+# terminal 1 — backend
+docker compose up -d db redis
+uvicorn app.main:app --reload            # http://localhost:8000
+
+# terminal 2 — frontend
+cd frontend && npm install && npm run dev # http://localhost:5173
+```
+
+### Search
+The hero "WO? / WANN?" card submits `GET /search?q=&sport=&week=` and navigates
+to `/search`. The Wind/Welle toggle maps to the backend's single-valued `sport`
+filter (`welle/wave → surf`, `wind → kitesurf` as the representative wind
+discipline). Open axes are covered minimally: an **empty** query shows the best
+regions for the season (`/search/best-regions`), and each region page lists its
+**best weeks** (`/areas/best-weeks`). These show an empty state until spots have a
+derived climatology.
+
+### Admin key
+Admin write endpoints are guarded by `X-Admin-Key` when the server sets `ADMIN_KEY`
+(Sprint 9). Enter the key once in the **admin form** (the "Admin-Key" bar); it is
+held in memory + `sessionStorage` for the session and sent on every `/admin/*`
+request. This is a single shared secret for an internal test operation — **not** a
+user-auth system (no per-editor accounts or rights). Without a key entered, a
+server that has `ADMIN_KEY` set returns 401 on writes (reads are unaffected).
+
+### Image upload
+Real hero-image uploads work: the admin form posts the validated file to the
+multipart `POST /admin/spots/{id}/image/upload` (Sprint 3), which stores it under
+`MEDIA_DIR` and serves it from the `/media` mount. There is no half-built upload UI
+— the old standalone image page was removed; upload lives in the spot form.
+
+## Deploy & Betrieb (VPS)
+
+Production runs on a **single VPS with Docker Compose** — same `postgis`/`redis`
+images as local dev, plus the API image (built from the `Dockerfile`) and a
+[Caddy](https://caddyserver.com/) reverse proxy that terminates TLS automatically.
+Files: `Dockerfile`, `docker-compose.prod.yml`, `Caddyfile`, `env.prod.example`,
+`scripts/entrypoint.sh` (migrate-then-serve), `scripts/backup.sh`.
+
+The frontend is hosted separately (static host); this VPS serves only the API, so
+point the domain (e.g. `api.example.com`) and the frontend's `VITE_API_URL` at it.
+
+### 1. Prerequisites
+- A VPS (e.g. Hetzner CX22) with Docker + Docker Compose.
+- A **DNS A-record** for your API domain → the VPS public IP, created **before**
+  first start. Caddy provisions the Let's Encrypt cert on first request; without
+  the A-record (and ports 80+443 reachable) certificate issuance fails.
+
+### 2. Secrets — never commit `.env.prod`
+`.env*` is gitignored (only the `*.example` templates are tracked). On the VPS:
+
+```bash
+git clone <repo> && cd surfwinddate
+cp env.prod.example .env.prod
+# generate strong secrets:
+echo "POSTGRES_PASSWORD=$(openssl rand -base64 32)" >> .env.prod   # then remove the placeholder line
+echo "ADMIN_KEY=$(openssl rand -base64 48)"        >> .env.prod
+# edit .env.prod: set DOMAIN and CORS_ORIGINS (your frontend URL)
+```
+
+`DATABASE_URL` is **assembled** from `POSTGRES_USER/PASSWORD/DB` in the compose
+file (host = the `db` service), so the password lives in exactly one place.
+
+### 3. First deploy
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec app python -m app.seed.seed   # once
+```
+The app container runs `alembic upgrade head` on start (see `entrypoint.sh`); Caddy
+waits for the app to be **healthy** (`depends_on: condition: service_healthy`) before
+routing, so a failed migration keeps the new app unhealthy instead of serving a
+half-migrated schema. `restart: unless-stopped` on every service means a VPS reboot
+brings the whole stack back automatically.
+
+### 4. Health
+```bash
+curl https://<domain>/health
+# {"status":"ok","db":"ok","redis":"ok"}
+```
+Per-dependency status. A dead **DB** → `status:"error"`, **HTTP 503**. A dead
+**Redis** (non-critical cache) → `status:"degraded"`, **HTTP 200** — so an uptime
+check / the proxy never confuses a broken cache with a broken server.
+
+### 5. Backups (local, 14-day rotation)
+The `backup` service runs `pg_dump` (+ a tar of the media volume) daily into
+**`./backups/` on the host** — a bind mount, **not** a Docker volume, so
+`docker compose down -v` (which wipes the named volumes) **cannot** delete backups.
+Files: `db-<timestamp>.sql.gz`, `media-<timestamp>.tar.gz`; older than 14 days are
+pruned. (Offsite copy — S3/R2 — is out of scope; add e.g. `rclone` on `./backups/`.)
+
+Trigger one on demand: `docker compose … exec backup sh /usr/local/bin/backup.sh`.
+
+### 6. Restore
+```bash
+# fresh DB, then pipe a dump in (tested end-to-end incl. PostGIS geography):
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec db \
+  sh -c 'dropdb -U "$POSTGRES_USER" --if-exists surfwind_restore && createdb -U "$POSTGRES_USER" surfwind_restore'
+gunzip -c backups/db-<timestamp>.sql.gz | \
+  docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T db psql -U surf -d surfwind_restore
+# to make it live: point POSTGRES_DB at the restored DB (or restore into the main DB while the app is down).
+```
+
+### 7. Redeploy
+```bash
+git pull
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+```
+Migrations run automatically. Compose recreates the app container (a few seconds of
+downtime — true zero-downtime migrations are out of scope); the health gate ensures a
+broken build/migration is reported unhealthy rather than silently serving errors.
+
+### Not in this sprint
+Offsite backups, monitoring/alerting, autoscaling, zero-downtime migrations, CI/CD.
 
 ## Tests
 

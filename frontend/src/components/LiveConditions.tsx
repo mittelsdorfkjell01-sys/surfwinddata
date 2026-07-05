@@ -1,4 +1,4 @@
-import type { LiveConditions as Live } from "../data/spotDetail";
+import type { LiveConditions as Live } from "../lib/types";
 import { degToCompass } from "./WindRose";
 
 /** One reading: small label above, value + unit below. */

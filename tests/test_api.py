@@ -19,7 +19,12 @@ def _seeded(_migrated_db):
 def test_health(client):
     resp = client.get("/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    body = resp.json()
+    # Granular per-dependency status. DB must be up (the suite needs it); Redis
+    # may be up or down depending on the environment, but must be reported.
+    assert body["db"] == "ok"
+    assert body["status"] in {"ok", "degraded"}
+    assert body["redis"] in {"ok", "down"}
 
 
 def test_list_spots_structure_and_coords(client):
@@ -55,7 +60,8 @@ def test_filter_spots_by_sport(client):
     resp = client.get("/spots", params={"sport": "wing"})
     assert resp.status_code == 200
     slugs = {s["slug"] for s in resp.json()}
-    assert slugs == {"sardinia-poetto"}
+    # Both seed spots that offer wing (poetto + the Baltic Fehmarn all-rounder).
+    assert slugs == {"sardinia-poetto", "fehmarn-wulfener-hals"}
 
 
 def test_list_regions(client):

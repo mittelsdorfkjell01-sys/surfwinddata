@@ -28,6 +28,13 @@ def list_spots(
     region_id: uuid.UUID | None = Query(default=None),
     status: str | None = Query(default=None),
     sport: str | None = Query(default=None, description="Filter to spots offering this sport"),
+    level: str | None = Query(default=None, description="Filter to spots at this rider level"),
+    water_character: str | None = Query(
+        default=None, description="Filter by water character (Wasserart)"
+    ),
+    style: list[str] | None = Query(
+        default=None, description="Filter to spots offering any of these riding styles"
+    ),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[SpotSummary]:
@@ -48,6 +55,13 @@ def list_spots(
         stmt = stmt.where(Spot.status == status)
     if sport is not None:
         stmt = stmt.where(Spot.sports.any(sport))
+    if level is not None:
+        stmt = stmt.where(Spot.level == level)
+    if water_character is not None:
+        stmt = stmt.where(Spot.water_character == water_character)
+    if style:
+        # Match spots offering ANY of the requested styles (array overlap).
+        stmt = stmt.where(Spot.style.overlap(style))
     stmt = stmt.limit(limit).offset(offset)
 
     rows = db.scalars(stmt).all()

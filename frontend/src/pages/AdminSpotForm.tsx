@@ -1,0 +1,659 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import ImageUpload from "../components/ImageUpload";
+import AdminKeyBar from "../components/AdminKeyBar";
+import { ErrorBanner } from "../components/AsyncStates";
+import { useRegions } from "../lib/hooks";
+import {
+  createSpot,
+  getSpot,
+  getReadiness,
+  updateSpot,
+  uploadHeroImage,
+  ApiError,
+  type FacilityKind,
+  type Readiness,
+  type SpotCreateBody,
+} from "../lib/api";
+import {
+  FACILITY_KINDS,
+  LEVELS,
+  STYLES,
+  WATER_CHARACTERS,
+  facilityLabel,
+  levelLabel,
+  sportLabel,
+  styleLabel,
+  waterCharacterLabel,
+} from "../lib/labels";
+
+const SPORTS = ["kitesurf", "windsurf", "wing", "surf"] as const;
+type Availability = "yes" | "no" | "unknown";
+
+const slugify = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+// --- small form controls ---------------------------------------------------
+
+function Field({
+  label,
+  children,
+  hint,
+  error,
+}: {
+  label: string;
+  children: React.ReactNode;
+  hint?: string;
+  error?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-[13px] font-medium text-navy">{label}</span>
+      <div className="mt-1.5">{children}</div>
+      {hint && !error && <p className="mt-1 text-[12px] text-muted">{hint}</p>}
+      {error && <p className="mt-1 text-[12px] font-medium text-red-600">{error}</p>}
+    </label>
+  );
+}
+
+const inputCls =
+  "w-full rounded-xl border border-navy/15 bg-white px-3 py-2 text-[14px] text-navy outline-none focus:border-navy/40";
+
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={active}
+      onClick={onClick}
+      className={`rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
+        active
+          ? "bg-navy text-white"
+          : "bg-white text-navy ring-1 ring-navy/15 hover:ring-navy/40"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+// --- page ------------------------------------------------------------------
+
+export default function AdminSpotForm() {
+  const { id } = useParams(); // present => edit mode
+  const isEdit = Boolean(id);
+  const navigate = useNavigate();
+  const { data: regions } = useRegions();
+
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [slugTouched, setSlugTouched] = useState(false);
+  const [regionId, setRegionId] = useState("");
+  const [description, setDescription] = useState("");
+  const [lat, setLat] = useState("");
+  const [lon, setLon] = useState("");
+  const [sports, setSports] = useState<string[]>([]);
+  const [level, setLevel] = useState("");
+  const [waterCharacter, setWaterCharacter] = useState("");
+  const [styles, setStyles] = useState<string[]>([]);
+  const [facing, setFacing] = useState("");
+  const [waterType, setWaterType] = useState("");
+  const [bottomType, setBottomType] = useState("");
+  const [windDirMin, setWindDirMin] = useState("");
+  const [windDirMax, setWindDirMax] = useState("");
+  const [tide, setTide] = useState("");
+  const [facilities, setFacilities] = useState<
+    Record<FacilityKind, { state: Availability; note: string }>
+  >(
+    () =>
+      Object.fromEntries(
+        FACILITY_KINDS.map((k) => [k, { state: "unknown", note: "" }])
+      ) as Record<FacilityKind, { state: Availability; note: string }>
+  );
+  const [heroFile, setHeroFile] = useState<File | null>(null);
+  const [credit, setCredit] = useState("");
+
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [readiness, setReadiness] = useState<Readiness | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [loadingExisting, setLoadingExisting] = useState(isEdit);
+
+  const effectiveSlug = slugTouched ? slug : slugify(name);
+  const isSurf = sports.includes("surf");
+
+  // Prefill in edit mode.
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    getSpot(id)
+      .then((s) => {
+        if (!alive) return;
+        setName(s.name);
+        setSlug(s.slug);
+        setSlugTouched(true);
+        setRegionId(s.region_id);
+        setDescription((s.editorial?.description as string) ?? "");
+        if (s.location) {
+          setLat(String(s.location.lat));
+          setLon(String(s.location.lon));
+        }
+        setSports(s.sports ?? []);
+        setLevel(s.level ?? "");
+        setWaterCharacter(s.water_character ?? "");
+        setStyles(s.style ?? []);
+        setFacing(s.facing != null ? String(s.facing) : "");
+        setWaterType(s.water_type ?? "");
+        setBottomType(s.bottom_type ?? "");
+        const uwd = s.editorial?.usable_wind_directions;
+        if (uwd && typeof uwd === "object") {
+          setWindDirMin(uwd.min != null ? String(uwd.min) : "");
+          setWindDirMax(uwd.max != null ? String(uwd.max) : "");
+        }
+        setTide(typeof s.editorial?.tide === "string" ? s.editorial.tide : "");
+        if (s.facilities) {
+          setFacilities((prev) => {
+            const next = { ...prev };
+            for (const k of FACILITY_KINDS) {
+              const entry = s.facilities?.[k];
+              next[k] = entry
+                ? { state: entry.available ? "yes" : "no", note: entry.note ?? "" }
+                : { state: "unknown", note: "" };
+            }
+            return next;
+          });
+        }
+      })
+      .catch((e) =>
+        alive && setError(e instanceof ApiError ? e.message : "Laden fehlgeschlagen.")
+      )
+      .finally(() => alive && setLoadingExisting(false));
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+
+  const toggle = (list: string[], v: string) =>
+    list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
+
+  const buildEditorial = (): Record<string, any> => {
+    const ed: Record<string, any> = {};
+    if (description.trim()) ed.description = description.trim();
+    if (windDirMin !== "" && windDirMax !== "")
+      ed.usable_wind_directions = { min: Number(windDirMin), max: Number(windDirMax) };
+    if (isSurf && tide.trim()) ed.tide = tide.trim();
+    return ed;
+  };
+
+  const buildFacilities = () => {
+    const out: Record<string, { available: boolean; note?: string }> = {};
+    for (const k of FACILITY_KINDS) {
+      const f = facilities[k];
+      if (f.state === "unknown") continue; // omit → "unknown" (hidden on the spot page)
+      out[k] = {
+        available: f.state === "yes",
+        ...(f.note.trim() ? { note: f.note.trim() } : {}),
+      };
+    }
+    return Object.keys(out).length ? out : null;
+  };
+
+  const validateLocal = (): boolean => {
+    const errs: Record<string, string> = {};
+    if (!name.trim()) errs.name = "Name ist erforderlich.";
+    if (!regionId) errs.region_id = "Region wählen.";
+    if (lat === "" || Number.isNaN(Number(lat))) errs.lat = "Breitengrad angeben.";
+    if (lon === "" || Number.isNaN(Number(lon))) errs.lon = "Längengrad angeben.";
+    if (heroFile && !credit.trim()) errs.credit = "Bild-Credit angeben.";
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setReadiness(null);
+    if (!validateLocal()) return;
+
+    setSubmitting(true);
+    try {
+      const body: SpotCreateBody = {
+        name: name.trim(),
+        slug: effectiveSlug || undefined,
+        region_id: regionId,
+        lat: Number(lat),
+        lon: Number(lon),
+        sports,
+        level: level || null,
+        water_character: waterCharacter || null,
+        style: styles,
+        water_type: waterType || null,
+        bottom_type: bottomType || null,
+        facing: facing !== "" ? Number(facing) : null,
+        facilities: buildFacilities(),
+        editorial: Object.keys(buildEditorial()).length ? buildEditorial() : null,
+      };
+
+      const spot =
+        isEdit && id ? await updateSpot(id, body) : await createSpot(body);
+
+      if (heroFile) {
+        await uploadHeroImage(spot.id, heroFile, credit.trim());
+      }
+
+      const r = await getReadiness(spot.id);
+      setReadiness(r);
+      setSavedId(spot.id);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+        // FastAPI/Pydantic 422: detail may be a list of {loc, msg}.
+        if (Array.isArray((err.detail as any)?.detail)) {
+          const fe: Record<string, string> = {};
+          for (const d of (err.detail as any).detail) {
+            const loc = Array.isArray(d.loc) ? d.loc[d.loc.length - 1] : d.loc;
+            fe[String(loc)] = d.msg;
+          }
+          setFieldErrors((prev) => ({ ...prev, ...fe }));
+        }
+      } else {
+        setError("Unerwarteter Fehler beim Speichern.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const regionOptions = useMemo(
+    () =>
+      (regions ?? [])
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name, "de")),
+    [regions]
+  );
+
+  if (loadingExisting) {
+    return (
+      <div className="min-h-screen bg-white">
+        <div className="mx-auto max-w-[820px] px-4 py-10 sm:px-8">
+          <div className="h-8 w-64 animate-pulse rounded bg-line" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-white">
+      <header className="border-b border-line">
+        <div className="mx-auto flex max-w-[820px] items-center justify-between px-4 py-4 sm:px-8">
+          <Link to="/" className="text-xl font-bold tracking-tight text-navy">
+            SpotInfo
+          </Link>
+          <span className="text-[13px] font-medium text-muted">
+            Admin · {isEdit ? "Spot bearbeiten" : "Neuer Spot"}
+          </span>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-[820px] px-4 py-10 sm:px-8">
+        <h1 className="text-[24px] font-semibold text-navy">
+          {isEdit ? "Spot bearbeiten" : "Neuen Spot anlegen"}
+        </h1>
+        <p className="mt-2 text-[15px] text-muted">
+          Alle redaktionellen Felder. Live-Wetter und Klimatologie werden separat
+          über die Datenfeeds gezogen.
+        </p>
+
+        <div className="mt-6">
+          <AdminKeyBar />
+        </div>
+
+        {savedId && readiness && (
+          <div className="mt-6 rounded-2xl bg-brand-green/10 p-5">
+            <p className="text-[14px] font-semibold text-brand-green">
+              ✓ Gespeichert.{" "}
+              {readiness.ready
+                ? "Der Spot erfüllt alle Pflichtfelder und kann live gehen."
+                : "Für die Veröffentlichung fehlen noch Angaben:"}
+            </p>
+            {!readiness.ready && (
+              <ul className="mt-2 list-inside list-disc text-[13px] text-navy/80">
+                {readiness.gaps.map((g) => (
+                  <li key={g}>{g}</li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-4 flex gap-3">
+              <Link
+                to={`/spot/${savedId}`}
+                className="rounded-lg bg-navy px-3 py-1.5 text-[13px] font-medium text-white hover:bg-navy-dark"
+              >
+                Zur Spot-Seite
+              </Link>
+              {!isEdit && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/admin/spot/${savedId}/edit`)}
+                  className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-navy ring-1 ring-navy/20 hover:ring-navy/40"
+                >
+                  Weiter bearbeiten
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-6">
+            <ErrorBanner message={error} />
+          </div>
+        )}
+
+        <form onSubmit={onSubmit} className="mt-8 space-y-8">
+          {/* Basisdaten */}
+          <section className="space-y-4">
+            <h2 className="text-[15px] font-semibold text-navy">Basisdaten</h2>
+            <Field label="Name" error={fieldErrors.name}>
+              <input
+                className={inputCls}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="z. B. Laboe"
+              />
+            </Field>
+            <Field
+              label="Slug"
+              hint="Wird automatisch aus dem Namen erzeugt — überschreibbar."
+            >
+              <input
+                className={inputCls}
+                value={effectiveSlug}
+                onChange={(e) => {
+                  setSlugTouched(true);
+                  setSlug(e.target.value);
+                }}
+              />
+            </Field>
+            <Field label="Region" error={fieldErrors.region_id}>
+              <select
+                className={inputCls}
+                value={regionId}
+                onChange={(e) => setRegionId(e.target.value)}
+              >
+                <option value="">— Region wählen —</option>
+                {regionOptions.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                    {r.country ? `, ${r.country}` : ""}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Breitengrad (lat)" error={fieldErrors.lat}>
+                <input
+                  className={inputCls}
+                  value={lat}
+                  onChange={(e) => setLat(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="54.41"
+                />
+              </Field>
+              <Field label="Längengrad (lon)" error={fieldErrors.lon}>
+                <input
+                  className={inputCls}
+                  value={lon}
+                  onChange={(e) => setLon(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="10.22"
+                />
+              </Field>
+            </div>
+            <Field label="Beschreibung">
+              <textarea
+                className={`${inputCls} min-h-[120px] resize-y`}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Charakter des Spots, Bedingungen, Besonderheiten …"
+              />
+            </Field>
+          </section>
+
+          {/* Sportarten */}
+          <section>
+            <h2 className="text-[15px] font-semibold text-navy">Sportarten</h2>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {SPORTS.map((s) => (
+                <Chip
+                  key={s}
+                  active={sports.includes(s)}
+                  onClick={() => setSports(toggle(sports, s))}
+                >
+                  {sportLabel(s)}
+                </Chip>
+              ))}
+            </div>
+          </section>
+
+          {/* Kategorien */}
+          <section className="space-y-4">
+            <h2 className="text-[15px] font-semibold text-navy">Kategorien</h2>
+            <Field label="Level">
+              <select
+                className={inputCls}
+                value={level}
+                onChange={(e) => setLevel(e.target.value)}
+              >
+                <option value="">— unbekannt —</option>
+                {LEVELS.map((l) => (
+                  <option key={l} value={l}>
+                    {levelLabel(l)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Wasserart" hint="Pflichtfeld für die Veröffentlichung.">
+              <select
+                className={inputCls}
+                value={waterCharacter}
+                onChange={(e) => setWaterCharacter(e.target.value)}
+              >
+                <option value="">— unbekannt —</option>
+                {WATER_CHARACTERS.map((w) => (
+                  <option key={w} value={w}>
+                    {waterCharacterLabel(w)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Fahrstil (Mehrfachauswahl)">
+              <div className="flex flex-wrap gap-1.5">
+                {STYLES.map((s) => (
+                  <Chip
+                    key={s}
+                    active={styles.includes(s)}
+                    onClick={() => setStyles(toggle(styles, s))}
+                  >
+                    {styleLabel(s)}
+                  </Chip>
+                ))}
+              </div>
+            </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Wassertyp" hint="ocean | sea | lake | lagoon">
+                <input
+                  className={inputCls}
+                  value={waterType}
+                  onChange={(e) => setWaterType(e.target.value)}
+                  placeholder="sea"
+                />
+              </Field>
+              <Field label="Untergrund" hint="sand | rock | reef | mixed">
+                <input
+                  className={inputCls}
+                  value={bottomType}
+                  onChange={(e) => setBottomType(e.target.value)}
+                  placeholder="sand"
+                />
+              </Field>
+            </div>
+          </section>
+
+          {/* Wind & Gezeiten */}
+          <section className="space-y-4">
+            <h2 className="text-[15px] font-semibold text-navy">Wind & Ausrichtung</h2>
+            <Field
+              label="Nutzbare Windrichtungen"
+              hint="Sektor in Grad (0 = N). Pflichtfeld für Kite/Wind/Wing."
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  className={inputCls}
+                  value={windDirMin}
+                  onChange={(e) => setWindDirMin(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="von (z. B. 180)"
+                />
+                <span className="text-muted">–</span>
+                <input
+                  className={inputCls}
+                  value={windDirMax}
+                  onChange={(e) => setWindDirMax(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="bis (z. B. 260)"
+                />
+              </div>
+            </Field>
+            <Field label="Strandausrichtung (facing, 0–359)">
+              <input
+                className={inputCls}
+                value={facing}
+                onChange={(e) => setFacing(e.target.value)}
+                inputMode="numeric"
+                placeholder="45"
+              />
+            </Field>
+            {isSurf && (
+              <Field label="Gezeiten (Tide)" hint="Pflichtfeld für Surf-Spots.">
+                <input
+                  className={inputCls}
+                  value={tide}
+                  onChange={(e) => setTide(e.target.value)}
+                  placeholder="z. B. bei auflaufendem Wasser am besten"
+                />
+              </Field>
+            )}
+          </section>
+
+          {/* Facilities */}
+          <section>
+            <h2 className="text-[15px] font-semibold text-navy">Facilities</h2>
+            <p className="mt-1 text-[12px] text-muted">
+              „Unbekannt" wird auf der Spot-Seite ausgeblendet.
+            </p>
+            <div className="mt-3 space-y-3">
+              {FACILITY_KINDS.map((k) => (
+                <div
+                  key={k}
+                  className="rounded-xl bg-[#F1F5FA] p-3 sm:flex sm:items-center sm:gap-3"
+                >
+                  <span className="w-40 shrink-0 text-[13.5px] font-medium text-navy">
+                    {facilityLabel(k)}
+                  </span>
+                  <div className="mt-2 flex gap-1.5 sm:mt-0">
+                    {(
+                      [
+                        ["yes", "Vorhanden"],
+                        ["no", "Nicht vorhanden"],
+                        ["unknown", "Unbekannt"],
+                      ] as [Availability, string][]
+                    ).map(([st, label]) => (
+                      <Chip
+                        key={st}
+                        active={facilities[k].state === st}
+                        onClick={() =>
+                          setFacilities((prev) => ({
+                            ...prev,
+                            [k]: { ...prev[k], state: st },
+                          }))
+                        }
+                      >
+                        {label}
+                      </Chip>
+                    ))}
+                  </div>
+                  {facilities[k].state !== "unknown" && (
+                    <input
+                      className={`${inputCls} mt-2 sm:mt-0`}
+                      value={facilities[k].note}
+                      onChange={(e) =>
+                        setFacilities((prev) => ({
+                          ...prev,
+                          [k]: { ...prev[k], note: e.target.value },
+                        }))
+                      }
+                      placeholder="Notiz (optional)"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Hero-Bild */}
+          <section>
+            <h2 className="text-[15px] font-semibold text-navy">Header-Bild</h2>
+            <div className="mt-3">
+              <ImageUpload onAccept={setHeroFile} />
+            </div>
+            {heroFile && (
+              <div className="mt-3">
+                <Field label="Bild-Credit / Urheber" error={fieldErrors.credit}>
+                  <input
+                    className={inputCls}
+                    value={credit}
+                    onChange={(e) => setCredit(e.target.value)}
+                    placeholder="Fotograf:in / Quelle"
+                  />
+                </Field>
+              </div>
+            )}
+          </section>
+
+          <div className="flex items-center gap-3 border-t border-line pt-6">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="rounded-xl bg-navy px-5 py-2.5 text-[14px] font-medium text-white hover:bg-navy-dark disabled:opacity-50"
+            >
+              {submitting
+                ? "Speichern …"
+                : isEdit
+                ? "Änderungen speichern"
+                : "Spot anlegen"}
+            </button>
+            <Link to="/" className="text-[14px] text-muted hover:text-navy">
+              Abbrechen
+            </Link>
+          </div>
+        </form>
+      </main>
+    </div>
+  );
+}

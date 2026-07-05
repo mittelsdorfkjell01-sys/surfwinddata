@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import L, { type Map as LeafletMap } from "leaflet";
 import Header from "../components/Header";
 import MapSpotCard from "../components/MapSpotCard";
 import { CloseIcon, MinusIcon, PlusIcon } from "../lib/icons";
-import { mapSpots } from "../data/spots";
+import { useSpots } from "../lib/hooks";
 
 /** Navy teardrop pin as a Leaflet divIcon. */
 const pinIcon = L.divIcon({
@@ -23,13 +23,27 @@ const pinIcon = L.divIcon({
 export default function MapView() {
   const navigate = useNavigate();
   const [map, setMap] = useState<LeafletMap | null>(null);
+  const { data: spots } = useSpots({ status: "published" });
+
+  const withCoords = useMemo(
+    () => (spots ?? []).filter((s) => s.coords),
+    [spots]
+  );
+  const center = useMemo<[number, number]>(() => {
+    if (withCoords.length === 0) return [40.3, 9.3];
+    return [
+      withCoords.reduce((a, s) => a + s.coords![0], 0) / withCoords.length,
+      withCoords.reduce((a, s) => a + s.coords![1], 0) / withCoords.length,
+    ];
+  }, [withCoords]);
 
   return (
     <div className="relative h-screen w-screen overflow-hidden">
       <Header />
 
       <MapContainer
-        center={[40.3, 9.3]}
+        key={withCoords.length ? "loaded" : "init"}
+        center={center}
         zoom={7}
         zoomControl={false}
         scrollWheelZoom
@@ -42,15 +56,13 @@ export default function MapView() {
           subdomains="abcd"
         />
 
-        {mapSpots.map((spot) =>
-          spot.coords ? (
-            <Marker key={spot.id} position={spot.coords} icon={pinIcon}>
-              <Popup className="spot-popup" autoClose={false} closeOnClick={false}>
-                <MapSpotCard spot={spot} className="w-[200px]" />
-              </Popup>
-            </Marker>
-          ) : null
-        )}
+        {withCoords.map((spot) => (
+          <Marker key={spot.id} position={spot.coords!} icon={pinIcon}>
+            <Popup className="spot-popup" autoClose={false} closeOnClick={false}>
+              <MapSpotCard spot={spot} className="w-[200px]" />
+            </Popup>
+          </Marker>
+        ))}
       </MapContainer>
 
       {/* Top-right controls: close + zoom */}
@@ -88,7 +100,7 @@ export default function MapView() {
       {/* Recommended strip — evenly distributed across the full width */}
       <div className="absolute inset-x-0 bottom-0 z-[600] pb-5 pt-10">
         <div className="mx-auto flex max-w-[1400px] gap-x-6 overflow-x-auto no-scrollbar px-4 sm:overflow-visible sm:px-8">
-          {mapSpots.slice(0, 5).map((spot) => (
+          {withCoords.slice(0, 5).map((spot) => (
             <MapSpotCard
               key={spot.id}
               spot={spot}

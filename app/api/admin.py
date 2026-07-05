@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.admin import regions as admin_regions
@@ -13,17 +13,20 @@ from app.admin.deps import get_cds_client, get_stock_client, require_admin
 from app.admin.jobs import get_job_status, trigger_era5_job
 from app.admin.readiness import validate_spot_readiness
 from app.admin.spots import NotReadyError
+from app.config import get_settings
 from app.db.session import get_db
+from app.media import HeroImageError, save_hero_image, validate_hero_image
+from app.models import Spot
 from app.schemas import RegionRead, SpotRead
 from app.schemas.admin import (
     AssignRegionRequest,
     ImageRequest,
-    MetadataUpdate,
     OverrideRequest,
     RegionCreate,
     RegionDefaultsUpdate,
     RevertRequest,
     SpotCreate,
+    SpotUpdate,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -52,18 +55,22 @@ def create_spot(
 
 
 @router.patch("/spots/{spot_id}", response_model=SpotRead)
-def update_metadata(
+def update_spot(
     spot_id: uuid.UUID,
-    body: MetadataUpdate,
+    body: SpotUpdate,
     db: Session = Depends(get_db),
     x_admin_actor: str | None = Header(default=None),
 ):
+    """Patch a spot: editorial (merged) + structural/category columns. Only the
+    fields present in the request are applied. Invalid enum values → 422."""
     try:
-        spot = admin_spots.update_spot_metadata(
-            spot_id, body.editorial, db=db, actor=_actor(x_admin_actor)
+        spot = admin_spots.update_spot(
+            spot_id, body.to_data(), db=db, actor=_actor(x_admin_actor)
         )
     except LookupError:
         raise HTTPException(status_code=404, detail="Spot not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     return SpotRead.from_orm_spot(spot)
 
 
@@ -118,6 +125,41 @@ def set_image(
         raise HTTPException(status_code=404, detail="Spot not found")
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    return SpotRead.from_orm_spot(spot)
+
+
+@router.post("/spots/{spot_id}/image/upload", response_model=SpotRead)
+async def upload_image(
+    spot_id: uuid.UUID,
+    file: UploadFile = File(...),
+    credit: str = Form(..., description="Bild-Credit / Urheber (Pflicht)"),
+    db: Session = Depends(get_db),
+    x_admin_actor: str | None = Header(default=None),
+):
+    """Upload a hero image (multipart). Re-validates the frontend HERO_REQ rules
+    server-side, stores the file under ``media_dir`` and records it as the spot's
+    image with ``source='upload'``, ``license='own'`` and the given credit."""
+    if not (credit and credit.strip()):
+        raise HTTPException(status_code=422, detail="Bild-Credit ist erforderlich.")
+    if db.get(Spot, spot_id) is None:
+        raise HTTPException(status_code=404, detail="Spot not found")
+
+    data = await file.read()
+    try:
+        _, _, ext = validate_hero_image(data, file.content_type)
+    except HeroImageError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    settings = get_settings()
+    url = save_hero_image(
+        spot_id, data, ext,
+        media_dir=settings.media_dir, url_prefix=settings.media_url_prefix,
+    )
+    spot = admin_spots.manage_spot_image(
+        spot_id,
+        {"url": url, "source": "upload", "license": "own", "credit": credit.strip()},
+        db=db, actor=_actor(x_admin_actor),
+    )
     return SpotRead.from_orm_spot(spot)
 
 

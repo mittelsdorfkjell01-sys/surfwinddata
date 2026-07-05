@@ -6,6 +6,8 @@ override → audit → provenance → recompute → revert behaviour.
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from sqlalchemy import select
 
@@ -35,6 +37,21 @@ def _seeded(_migrated_db):
         db.close()
 
 
+@pytest.fixture(autouse=True)
+def _cleanup_test_rows(db):
+    """Delete this module's created regions after **each** test so accumulated
+    spots/jobs don't collide (every fake job reuses cds_request_id 'fake-1') or
+    leak into later modules. Region delete cascades to spots + era5_jobs."""
+    yield
+    from app.models import Region
+
+    for region in db.scalars(
+        select(Region).where(Region.slug.like("test-region-%"))
+    ).all():
+        db.delete(region)
+    db.commit()
+
+
 @pytest.fixture
 def admin(client):
     app.dependency_overrides[get_cds_client] = lambda: FakeCdsClient(make_synthetic_series())
@@ -46,8 +63,12 @@ def admin(client):
 
 @pytest.fixture
 def region_id(admin):
+    # Unique slug per test — the fixture is function-scoped and rows aren't torn
+    # down between tests, so a fixed slug would collide on the 2nd test.
+    suffix = uuid.uuid4().hex[:8]
     resp = admin.post("/admin/regions", json={
-        "name": "Test Region", "country": "DE", "lat": 54.4, "lon": 10.2,
+        "name": f"Test Region {suffix}", "slug": f"test-region-{suffix}",
+        "country": "DE", "lat": 54.4, "lon": 10.2,
         "defaults": {"model_pref": "icon_d2"},
     })
     assert resp.status_code == 201
@@ -55,10 +76,12 @@ def region_id(admin):
 
 
 def _create_spot(admin, region_id, **overrides):
+    suffix = uuid.uuid4().hex[:8]
     body = {
-        "name": "New Spot", "region_id": region_id, "lat": 54.41, "lon": 10.22,
+        "name": f"New Spot {suffix}", "slug": f"new-spot-{suffix}",
+        "region_id": region_id, "lat": 54.41, "lon": 10.22,
         "sports": ["kitesurf"], "water_type": "sea", "bottom_type": "sand",
-        "level": "beginner",
+        "level": "beginner", "water_character": "chop",
     }
     body.update(overrides)
     resp = admin.post("/admin/spots", json=body)

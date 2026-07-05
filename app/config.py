@@ -1,6 +1,8 @@
 from functools import lru_cache
+from typing import Annotated
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -18,6 +20,32 @@ class Settings(BaseSettings):
 
     api_title: str = "Surfwinddate API"
     api_debug: bool = True
+
+    # Browser origins allowed to call the API (CORS). The Vite dev server runs on
+    # 5173 by default. NoDecode keeps pydantic-settings from JSON-parsing the env
+    # var so the validator below can accept a comma-separated list too.
+    cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
+
+    # Where uploaded hero images are stored on disk, and the URL prefix they are
+    # served from (StaticFiles mount in app.main). The stored image URL is
+    # root-relative (e.g. "/media/spots/<id>/hero.jpg"); the frontend resolves it
+    # against the API base.
+    media_dir: str = "data/media"
+    media_url_prefix: str = "/media"
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _split_origins(cls, v):
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return []
+            if s.startswith("["):  # JSON array
+                import json
+
+                return json.loads(s)
+            return [o.strip() for o in s.split(",") if o.strip()]
+        return v
 
     # Directory where ERA5 raw extracts (Parquet) are stored by the pipeline.
     era5_raw_dir: str = "data/era5_raw"

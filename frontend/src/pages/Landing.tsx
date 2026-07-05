@@ -1,12 +1,21 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import Header from "../components/Header";
 import HeroImage from "../components/HeroImage";
 import type { Sport } from "../components/SportToggle";
 import SearchBar from "../components/SearchBar";
 import SpotCard from "../components/SpotCard";
+import SortDropdown from "../components/SortDropdown";
 import ViewToggle from "../components/ViewToggle";
-import { SortIcon } from "../lib/icons";
-import { topSpots } from "../data/spots";
+import { ErrorBanner, EmptyState, SpotGridSkeleton } from "../components/AsyncStates";
+import { useSpots } from "../lib/hooks";
+import {
+  filtersToQuery,
+  filtersToSearchParams,
+  parseFilters,
+  sortSpots,
+  type FilterState,
+} from "../lib/filters";
 
 /** Hero image follows the sport toggle: Wind vs. Welle (wave). */
 const HERO: Record<Sport, string> = {
@@ -17,6 +26,16 @@ const HERO: Record<Sport, string> = {
 
 export default function Landing() {
   const [sport, setSport] = useState<Sport>("wind");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filters = parseFilters(searchParams);
+  const setFilters = (next: FilterState) =>
+    setSearchParams(filtersToSearchParams(next), { replace: true });
+
+  const { data: spots, loading, error } = useSpots({
+    status: "published",
+    ...filtersToQuery(filters),
+  });
+  const sorted = spots ? sortSpots(spots, filters.sort) : null;
 
   return (
     <div className="min-h-screen bg-white">
@@ -35,7 +54,7 @@ export default function Landing() {
 
           <div className="absolute inset-x-0 bottom-12 z-20 px-4 sm:px-6">
             <div className="mx-auto max-w-[960px]">
-              <SearchBar />
+              <SearchBar sport={sport} />
             </div>
           </div>
         </div>
@@ -57,19 +76,22 @@ export default function Landing() {
 
         <div className="mt-10 flex items-center justify-between border-b border-line/70 pb-4">
           <h2 className="text-[15px] font-medium text-navy">aktuelle Topspots</h2>
-          <button
-            type="button"
-            className="flex items-center gap-2 text-[15px] text-navy transition-colors hover:text-navy/60"
-          >
-            <SortIcon className="text-[18px]" />
-            Sortieren
-          </button>
+          <SortDropdown value={filters} onChange={setFilters} />
         </div>
 
-        <div className="mt-8 grid grid-cols-1 gap-x-6 gap-y-9 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-          {topSpots.map((spot) => (
-            <SpotCard key={spot.id} spot={spot} />
-          ))}
+        <div className="mt-8">
+          {loading && <SpotGridSkeleton />}
+          {error && !loading && <ErrorBanner message={error} />}
+          {!loading && !error && sorted && sorted.length === 0 && (
+            <EmptyState message="Keine Spots für diese Auswahl." />
+          )}
+          {!loading && !error && sorted && sorted.length > 0 && (
+            <div className="grid grid-cols-1 gap-x-6 gap-y-9 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+              {sorted.map((spot) => (
+                <SpotCard key={spot.id} spot={spot} />
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </div>

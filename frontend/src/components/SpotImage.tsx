@@ -1,0 +1,55 @@
+/**
+ * A spot's image with a branded fallback. When `src` is empty (a seed spot with
+ * no hero uploaded yet), it renders a calm brand-coloured field carrying the
+ * spot name + region instead of an external placeholder — so the grid never
+ * shows a broken image or a random `picsum` photo.
+ */
+export default function SpotImage({
+  src,
+  name,
+  region,
+  className = "",
+  compact = false,
+}: {
+  src?: string;
+  name: string;
+  region?: string;
+  className?: string;
+  /** Smaller type for tight cards (map popup / strip). */
+  compact?: boolean;
+}) {
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={name}
+        loading="lazy"
+        className={`h-full w-full object-cover ${className}`}
+      />
+    );
+  }
+  return (
+    <div
+      role="img"
+      aria-label={region ? `${name}, ${region}` : name}
+      className={`flex h-full w-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-navy-soft to-[#c2d3e6] px-3 text-center ${className}`}
+    >
+      <span
+        className={`font-semibold leading-tight text-navy/85 ${
+          compact ? "text-[13px]" : "text-[15px]"
+        }`}
+      >
+        {name}
+      </span>
+      {region && (
+        <span
+          className={`leading-tight text-navy/50 ${
+            compact ? "text-[10px]" : "text-[11px]"
+          }`}
+        >
+          {region}
+        </span>
+      )}
+    </div>
+  );
+}

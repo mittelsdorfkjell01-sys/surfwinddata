@@ -10,6 +10,8 @@ pydantic-settings==2.7.0
 redis==5.2.1
 shapely==2.0.6
 httpx==0.28.1            # Open-Meteo client (Sprint 3 live path) + test client
+python-multipart==0.0.20  # multipart/form-data parsing for the hero-image upload
+pillow==11.1.0            # server-side hero-image dimension/format validation
 
 # --- ERA5 climatology pipeline (Sprint 2) ---
 numpy==2.4.6

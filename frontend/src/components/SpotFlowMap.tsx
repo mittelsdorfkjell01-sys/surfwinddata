@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
-import type { WaterType } from "../data/spotDetail";
+import type { WaterType } from "../lib/types";
 
 const rad = (deg: number) => (deg * Math.PI) / 180;
 const MAP_ZOOM = 14.5;

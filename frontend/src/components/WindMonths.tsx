@@ -1,4 +1,4 @@
-import type { MonthWind } from "../data/spotDetail";
+import type { MonthWind } from "../lib/types";
 
 /**
  * Yearly wind climatology. Each month is a cluster of thin weekly bars, so you
