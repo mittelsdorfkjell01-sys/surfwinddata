@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     # TTL (seconds) for cached Open-Meteo live/forecast responses (30-60 min band).
     live_cache_ttl: int = 1800
 
+    # Optional comma-separated override of the independent global models whose
+    # disagreement forms the Sprint 18 consensus band (default: the DWD/NOAA/ECMWF
+    # trio in app.live.models.CONSENSUS_GLOBAL_MODELS). None => use the default.
+    live_consensus_models: str | None = None
+
     # Optional shared key guarding the /admin endpoints (X-Admin-Key header).
     # None => admin is unprotected (no auth yet; see Sprint 8 notes).
     admin_key: str | None = None

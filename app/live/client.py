@@ -23,7 +23,7 @@ MAX_FORECAST_DAYS = 7
 
 
 class OpenMeteoClient(Protocol):
-    def fetch_forecast(self, lat: float, lon: float, model: str, days: int) -> dict: ...
+    def fetch_forecast(self, lat: float, lon: float, models: str, days: int) -> dict: ...
 
     def fetch_marine(self, lat: float, lon: float, days: int) -> dict: ...
 
@@ -42,8 +42,16 @@ class HttpOpenMeteoClient:
         return resp.json()
 
     def fetch_forecast(
-        self, lat: float, lon: float, model: str, days: int = MAX_FORECAST_DAYS
+        self, lat: float, lon: float, models: str, days: int = MAX_FORECAST_DAYS
     ) -> dict:
+        """Fetch one or more models in a single request.
+
+        ``models`` is a comma-joined list (e.g. ``"icon_eu,gfs_seamless"``). When
+        more than one model is requested Open-Meteo suffixes the hourly/current
+        field names (``wind_speed_10m_icon_eu``); a single model uses bare keys.
+        A multi-model request costs the same as a single one -- the payload is
+        larger but there is no extra request per model.
+        """
         return self._get(
             FORECAST_URL,
             {
@@ -51,7 +59,7 @@ class HttpOpenMeteoClient:
                 "longitude": lon,
                 "hourly": FORECAST_HOURLY,
                 "current": FORECAST_HOURLY,
-                "models": model,
+                "models": models,
                 "forecast_days": min(days, MAX_FORECAST_DAYS),
                 "wind_speed_unit": "kn",
                 "timezone": "auto",

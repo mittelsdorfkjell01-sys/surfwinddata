@@ -76,9 +76,10 @@ def test_live_conditions_shape_and_model():
     assert out["model"] == "icon_d2"  # honoured model_pref
     cur = out["current"]
     assert set(cur) == {
-        "wind", "gust", "dir", "air", "sst", "swell", "period", "swell_dir"
+        "wind", "gust", "dir", "air", "sst", "swell", "period", "swell_dir",
+        "wind_spread", "gust_spread",
     }
-    assert cur["wind"] == 14.0
+    assert cur["wind"] == 14.0  # consensus median (symmetric spread -> base)
     assert cur["sst"] == 20.0
 
 
@@ -142,3 +143,67 @@ def test_forecast_hours_merge_wind_and_swell():
     assert first_hour["wind"] is not None
     assert first_hour["swell"] is not None      # marine merged in
     assert first_hour["period"] is not None
+
+
+# --- multi-model consensus + spread (Sprint 18) ----------------------------
+
+def test_live_conditions_expose_consensus_band():
+    spot = make_spot()
+    out = get_live_conditions(
+        spot.id, db=FakeDB(spot), client=FakeOpenMeteoClient(), cache=InMemoryCache()
+    )
+    assert len(out["models"]) >= 3            # several models fetched in one request
+    cur = out["current"]
+    assert cur["wind"] == 14.0                # consensus median
+    band = cur["wind_spread"]
+    assert band["n"] == len(out["models"])
+    assert band["low"] < band["median"] < band["high"]
+
+
+def test_forecast_confidence_is_spread_driven():
+    # tight early days -> hoch; disagreement widens toward the horizon -> niedrig
+    spot = make_spot()
+    series = get_forecast_series(
+        spot.id, days=7, db=FakeDB(spot),
+        client=FakeOpenMeteoClient(data_days=8), cache=InMemoryCache(),
+    )
+    confs = [d["confidence"] for d in series["days"]]
+    assert confs[0] == "hoch"
+    assert confs[-1] == "niedrig"
+    # monotone non-improving as the horizon (and model disagreement) grows
+    rank = {"hoch": 0, "mittel": 1, "niedrig": 2}
+    assert all(rank[a] <= rank[b] for a, b in zip(confs, confs[1:]))
+    # the day band widens for the strip
+    last = series["days"][-1]["summary"]
+    assert last["wind_high"] > last["wind_low"]
+
+
+def test_forecast_hour_has_wind_spread():
+    spot = make_spot()
+    series = get_forecast_series(
+        spot.id, days=2, db=FakeDB(spot),
+        client=FakeOpenMeteoClient(data_days=8), cache=InMemoryCache(),
+    )
+    band = series["days"][1]["hours"][0]["wind_spread"]  # day 2 -> real spread
+    assert band and band["n"] >= 2 and band["high"] > band["low"]
+
+
+def test_consensus_degrades_gracefully_to_single_model():
+    # 3 of 4 models report nothing -> n==1, no error, calendar fallback confidence
+    spot = make_spot()  # -> [icon_eu, icon_seamless, gfs_seamless, ecmwf_ifs025]
+    client = FakeOpenMeteoClient(
+        data_days=8,
+        null_models=["icon_seamless", "gfs_seamless", "ecmwf_ifs025"],
+    )
+    series = get_forecast_series(
+        spot.id, days=7, db=FakeDB(spot), client=client, cache=InMemoryCache()
+    )
+    for day in series["days"]:
+        for h in day["hours"]:
+            if h["wind_spread"]:
+                assert h["wind_spread"]["n"] == 1   # only the primary survived
+    # no spread signal -> falls back to the calendar tiers
+    confs = [d["confidence"] for d in series["days"]]
+    assert confs == ["hoch", "hoch", "hoch", "mittel", "mittel", "niedrig", "niedrig"]
+    # still returns a wind value (the surviving model's) -> no spot falls out
+    assert series["days"][0]["hours"][0]["wind"] is not None

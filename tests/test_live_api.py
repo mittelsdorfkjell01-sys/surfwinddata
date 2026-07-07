@@ -38,9 +38,12 @@ def test_live_endpoint(client, seeded_spot_id, fake_live):
     assert resp.status_code == 200
     body = resp.json()
     assert body["model"]
+    assert len(body["models"]) >= 3            # consensus set exposed
     assert set(body["current"]) == {
-        "wind", "gust", "dir", "air", "sst", "swell", "period", "swell_dir"
+        "wind", "gust", "dir", "air", "sst", "swell", "period", "swell_dir",
+        "wind_spread", "gust_spread",
     }
+    assert body["current"]["wind_spread"]["n"] == len(body["models"])
 
 
 def test_forecast_endpoint_caps_at_7(client, seeded_spot_id, fake_live):

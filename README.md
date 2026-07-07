@@ -288,11 +288,13 @@ persisted to Postgres** (cache only). Code lives in [`app/live/`](app/live/):
 
 | Function (`app.live.*`)                  | Responsibility                                   |
 | ---------------------------------------- | ------------------------------------------------ |
-| `models.select_model(lat, lon, pref)`    | pick regional model; `spots.model_pref` wins     |
-| `client.HttpOpenMeteoClient`             | `fetch_forecast` / `fetch_marine` (httpx)        |
+| `models.select_model(lat, lon, pref)`    | pick primary/home model; `spots.model_pref` wins |
+| `models.consensus_models(lat, lon, pref)`| the primary + independent globals fetched together |
+| `consensus.spread / confidence_from_spread` | median/min/max band + spread→confidence tier |
+| `client.HttpOpenMeteoClient`             | `fetch_forecast` (multi-model) / `fetch_marine` (httpx) |
 | `cache.cache_get/cache_set`              | Redis JSON cache, keyed + TTL'd                  |
-| `service.get_live_conditions(spot_id)`   | current `{wind,gust,dir,air,sst,swell,period,swell_dir}` |
-| `service.get_forecast_series(spot_id)`   | 7 days, hourly + daily summary + confidence      |
+| `service.get_live_conditions(spot_id)`   | current consensus `{wind,gust,…}` + `wind_spread`/`gust_spread` |
+| `service.get_forecast_series(spot_id)`   | 7 days, hourly + daily summary + spread-based confidence |
 
 ### Model selection
 
@@ -318,9 +320,33 @@ pulls the full 7-day horizon once, so `/live` and `/forecast` share one entry pe
 
 ### Confidence staffing
 
-Each forecast day carries a confidence tier: days **1–3 `hoch`**, **4–5
-`mittel`**, **6–7 `niedrig`**. The horizon is hard-capped at 7 days even if more
-were requested or returned.
+Each forecast day carries a confidence tier derived from **model disagreement**
+(see the consensus band below): tight agreement → `hoch`, wide spread → `niedrig`.
+Because model spread naturally widens with the horizon this trends downward on its
+own; the old calendar rule (days 1–3 `hoch` / 4–5 `mittel` / 6–7 `niedrig`) remains
+only as a graceful fallback for days with fewer than two models reporting. The
+horizon is hard-capped at 7 days even if more were requested or returned.
+
+### Model consensus & uncertainty band (Sprint 18, Phase 1)
+
+Instead of one model, the forecast fetches several independent systems in a
+**single** request — the spot's regional/home pick plus the global trio
+`icon_seamless` / `gfs_seamless` / `ecmwf_ifs025` (`consensus_models`; overridable
+via `LIVE_CONSENSUS_MODELS`). Per timestep we report the **consensus** (median
+across models) as the headline `wind`/`gust`, plus a **spread band**
+(`wind_spread`/`gust_spread` = `{low, high, median, n}`, min/max across models) as
+honest, data-driven uncertainty — the model disagreement no consumer tool shows.
+
+- One request per location covers every model → **no extra cost** (larger payload
+  only). Multi-model responses are cached under `var=forecast_multi`.
+- `n` is how many models reported; when a spot/timestep has only one model with
+  data the band collapses to that value and confidence falls back to the calendar
+  rule — **no spot ever falls out** (graceful degradation).
+- Direction/air come from the primary model; waves stay single-source (the Marine
+  API is not multi-model). Runtime-derived + cached only — no schema/DB changes.
+
+> Phase 2 (per-spot bias correction against observations) and Phase 3 (crowd
+> reports) are deliberately deferred — they need observation/traffic data.
 
 > Scoring/badges live in the score engine (Sprint 4), which consumes this path —
 > the live endpoints themselves return raw values only.

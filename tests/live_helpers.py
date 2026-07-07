@@ -13,6 +13,12 @@ from app.models import Spot
 
 _BASE = datetime(2026, 6, 29, 0, 0)
 
+# Default per-day growth of the multi-model wind band width (kt/day). With the
+# service thresholds (<=6 hoch, <=12 mittel), day-d width = 2.5*d reproduces the
+# tier sequence [hoch,hoch,hoch,mittel,mittel,niedrig,niedrig] for a 7-day
+# horizon -- now driven by *model spread*, not a calendar rule.
+SPREAD_PER_DAY_KT = 2.5
+
 
 def _hourly_times(days: int) -> list[str]:
     return [
@@ -21,8 +27,8 @@ def _hourly_times(days: int) -> list[str]:
     ]
 
 
-def make_forecast_response(days: int = 8) -> dict:
-    times = _hourly_times(days)
+def _single_model_forecast(times: list[str]) -> dict:
+    """Bare-key response, mirroring Open-Meteo's single-model shape."""
     n = len(times)
     return {
         "latitude": 36.0,
@@ -42,6 +48,70 @@ def make_forecast_response(days: int = 8) -> dict:
             "temperature_2m": [18.0 + (i % 8) for i in range(n)],
         },
     }
+
+
+def make_forecast_response(
+    days: int = 8,
+    models: list[str] | None = None,
+    null_models: list[str] | None = None,
+) -> dict:
+    """Synthetic Open-Meteo forecast payload.
+
+    - ``models`` None/single -> bare-key (single-model) response.
+    - ``models`` with >1 entry -> suffixed keys per model with a symmetric spread
+      that grows with the day index, so the consensus (median) stays on the base
+      series while the band widens toward the horizon. Models in ``null_models``
+      return all-``None`` arrays (coverage gap) to exercise graceful degradation.
+    """
+    times = _hourly_times(days)
+    n = len(times)
+    if not models or len(models) == 1:
+        return _single_model_forecast(times)
+
+    null_set = set(null_models or [])
+    base_wind = [10.0 + (i % 12) for i in range(n)]
+    base_gust = [15.0 + (i % 12) for i in range(n)]
+    base_dir = [(i * 5) % 360 for i in range(n)]
+    base_air = [18.0 + (i % 8) for i in range(n)]
+
+    k = len(models)
+
+    def offset(mi: int, width: float) -> float:
+        # Symmetric around 0 so the median lands on the base series.
+        step = width / (k - 1)
+        return round(step * (mi - (k - 1) / 2), 2)
+
+    hourly: dict = {"time": times}
+    current: dict = {"time": times[0]}
+    for mi, m in enumerate(models):
+        if m in null_set:
+            hourly[f"wind_speed_10m_{m}"] = [None] * n
+            hourly[f"wind_gusts_10m_{m}"] = [None] * n
+            hourly[f"wind_direction_10m_{m}"] = [None] * n
+            hourly[f"temperature_2m_{m}"] = [None] * n
+            current[f"wind_speed_10m_{m}"] = None
+            current[f"wind_gusts_10m_{m}"] = None
+            current[f"wind_direction_10m_{m}"] = None
+            current[f"temperature_2m_{m}"] = None
+            continue
+        hourly[f"wind_speed_10m_{m}"] = [
+            round(base_wind[i] + offset(mi, SPREAD_PER_DAY_KT * (i // 24)), 2)
+            for i in range(n)
+        ]
+        hourly[f"wind_gusts_10m_{m}"] = [
+            round(base_gust[i] + offset(mi, SPREAD_PER_DAY_KT * (i // 24)), 2)
+            for i in range(n)
+        ]
+        hourly[f"wind_direction_10m_{m}"] = base_dir
+        hourly[f"temperature_2m_{m}"] = base_air
+        # Current: a small fixed 4 kt band so the median stays 14/19 but the live
+        # tile still shows a spread.
+        current[f"wind_speed_10m_{m}"] = round(14.0 + offset(mi, 4.0), 2)
+        current[f"wind_gusts_10m_{m}"] = round(19.0 + offset(mi, 4.0), 2)
+        current[f"wind_direction_10m_{m}"] = 270.0
+        current[f"temperature_2m_{m}"] = 22.0
+
+    return {"latitude": 36.0, "longitude": -5.6, "current": current, "hourly": hourly}
 
 
 def make_marine_response(days: int = 8) -> dict:
@@ -66,18 +136,28 @@ def make_marine_response(days: int = 8) -> dict:
 
 
 class FakeOpenMeteoClient:
-    """Records call counts and the model it was asked for. No network."""
+    """Records call counts and the model set it was asked for. No network.
 
-    def __init__(self, data_days: int = 8) -> None:
+    ``null_models`` (subset of the requested set) return no data, to exercise
+    the graceful-degradation path.
+    """
+
+    def __init__(
+        self, data_days: int = 8, null_models: list[str] | None = None
+    ) -> None:
         self._data_days = data_days
+        self._null_models = null_models
         self.forecast_calls = 0
         self.marine_calls = 0
         self.models_seen: list[str] = []
 
-    def fetch_forecast(self, lat, lon, model, days=7) -> dict:
+    def fetch_forecast(self, lat, lon, models, days=7) -> dict:
         self.forecast_calls += 1
-        self.models_seen.append(model)
-        return make_forecast_response(self._data_days)
+        self.models_seen.append(models)
+        model_list = [m for m in models.split(",") if m] if models else []
+        return make_forecast_response(
+            self._data_days, models=model_list, null_models=self._null_models
+        )
 
     def fetch_marine(self, lat, lon, days=7) -> dict:
         self.marine_calls += 1

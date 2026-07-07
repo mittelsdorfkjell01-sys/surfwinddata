@@ -16,6 +16,12 @@ ICON_D2 = "icon_d2"                    # DWD ICON-D2, central Europe, ~2 km
 ICON_EU = "icon_eu"                    # DWD ICON-EU, Europe nest, ~7 km
 BEST_MATCH = "best_match"             # Open-Meteo global blend
 
+# Three independent global forecasting systems (DWD / NOAA / ECMWF). Their
+# disagreement is the honest structural spread used for the Sprint 18 consensus
+# band. ``best_match`` is deliberately excluded from the set: it is itself a
+# blend, not an independent member.
+CONSENSUS_GLOBAL_MODELS = ["icon_seamless", "gfs_seamless", "ecmwf_ifs025"]
+
 
 def _in_box(lat: float, lon: float, s: float, n: float, w: float, e: float) -> bool:
     return s <= lat <= n and w <= lon <= e
@@ -45,3 +51,30 @@ def select_model(lat: float, lon: float, pref: str | None = None) -> str:
         return ICON_EU
 
     return BEST_MATCH
+
+
+def consensus_models(
+    lat: float,
+    lon: float,
+    pref: str | None = None,
+    globals_: list[str] | None = None,
+) -> list[str]:
+    """The set of models fetched together for the consensus + spread band.
+
+    The spot's primary/home model (:func:`select_model`, honouring ``pref``)
+    leads the list, followed by the independent global systems
+    (:data:`CONSENSUS_GLOBAL_MODELS`, or ``globals_`` when configured). The
+    generic ``best_match`` blend is never added as a member; when it is the only
+    thing :func:`select_model` yields (mid-ocean spots), the set is just the
+    globals -- so no spot ever falls out of the consensus.
+
+    Deduplicated, stable order (primary first).
+    """
+    primary = select_model(lat, lon, pref)
+    members: list[str] = []
+    if primary != BEST_MATCH:
+        members.append(primary)
+    for m in (globals_ or CONSENSUS_GLOBAL_MODELS):
+        if m and m not in members:
+            members.append(m)
+    return members
