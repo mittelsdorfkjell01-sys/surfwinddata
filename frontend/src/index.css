@@ -28,6 +28,40 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* Snap a horizontal scroller (top-spots row). */
+  .snap-x-mandatory {
+    scroll-snap-type: x mandatory;
+  }
+  .snap-start {
+    scroll-snap-align: start;
+  }
+
+  /* --- "surfwind data" re-skin (Landing redesign) --- */
+
+  /* Frosted panel used for the tile overlay: teal-tinted translucent + blur. */
+  .glass {
+    background-color: rgba(30, 110, 126, 0.34);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  /* Lighter frosted white for cards/menus on the hero. */
+  .glass-white {
+    background-color: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  /* Full-page dimmer behind an open search panel (Airbnb-style scrim). */
+  .scrim {
+    background-color: rgba(10, 30, 40, 0.32);
+  }
+}
+
+@layer base {
+  /* The rounded "surfwind" wordmark. */
+  .wordmark {
+    @apply font-display font-semibold tracking-tight;
+  }
 }
 
 @keyframes fade {
@@ -36,6 +70,27 @@
   }
   to {
     opacity: 1;
+  }
+}
+
+/* Staggered entrance for the top-spots tiles (respect reduced-motion below). */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-up {
+  animation: fade-up 0.5s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up {
+    animation: none;
   }
 }
 

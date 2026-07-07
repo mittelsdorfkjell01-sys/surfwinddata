@@ -10,6 +10,19 @@ export default {
           dark: "#0E2748",
           soft: "#2C4E7E",
         },
+        // "surfwind data" re-skin (Sprint: Landing redesign). Warm orange wordmark +
+        // teal accents. Hexes eyeballed from the design frames — set as tokens so
+        // they're trivial to nudge to exact brand values.
+        "brand-orange": {
+          DEFAULT: "#E0823C", // wordmark + round search button
+          dark: "#CF7433",    // button hover/active
+        },
+        "brand-teal": {
+          DEFAULT: "#1E6E7E", // "data" subscript, field labels, header pill
+          dark: "#17586A",
+        },
+        // Warm off-white for panels/cards in the new design
+        cream: "#FBF6EF",
         // Beginner tag + status dot
         // Darkened so white tag text clears WCAG AA (~4.5:1)
         "brand-green": "#4A8159",
@@ -21,6 +34,8 @@ export default {
       },
       fontFamily: {
         sans: ["Poppins", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+        // Rounded display face used only for the "surfwind" wordmark.
+        display: ["Fredoka", "Poppins", "system-ui", "sans-serif"],
       },
       boxShadow: {
         card: "0 10px 30px -12px rgba(19, 51, 94, 0.25)",
