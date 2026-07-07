@@ -53,9 +53,11 @@ export default function Landing() {
           />
           <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/10" />
 
-          <div className="absolute inset-x-0 bottom-12 z-20 px-4 sm:px-6">
+          {/* z above the search scrim (z-1100, portalled to body) so the bar
+              stays crisp while the rest of the page dims. */}
+          <div className="absolute inset-x-0 bottom-12 z-[1200] px-4 sm:px-6">
             <div className="mx-auto max-w-[960px]">
-              <SearchBar sport={sport} />
+              <SearchBar />
             </div>
           </div>
         </div>
