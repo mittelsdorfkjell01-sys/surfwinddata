@@ -27,7 +27,16 @@ from sqlalchemy import select
 from app.db.session import SessionLocal
 from app.era5 import cds, pipeline
 from app.era5.grid import resolve_grid_cell
+from app.era5.openmeteo import OpenMeteoHistoryClient
 from app.models import Spot
+
+
+def _client(args):
+    """Extraction client. Open-Meteo Historical by default (no credentials);
+    ``--cds`` opts into the isolated Copernicus adapter (needs ~/.cdsapirc)."""
+    if getattr(args, "cds", False):
+        return cds.real_cds_client()
+    return OpenMeteoHistoryClient(years=getattr(args, "years", 20))
 
 
 def _resolve_spot(db, ref: str) -> Spot:
@@ -52,7 +61,7 @@ def _cmd_request(args) -> None:
         point = to_shape(spot.location)
         cell = spot.era5_cell or resolve_grid_cell(point.y, point.x)
         job = cds.request_era5_extract(
-            spot.id, cell, db=db, client=cds.real_cds_client(), years=args.years
+            spot.id, cell, db=db, client=_client(args), years=args.years
         )
         print(
             f"job {job.id} status={job.status} "
@@ -66,7 +75,7 @@ def _cmd_poll(args) -> None:
     db = SessionLocal()
     try:
         job = cds.poll_cds_job(
-            args.cds_request_id, db=db, client=cds.real_cds_client()
+            args.cds_request_id, db=db, client=_client(args)
         )
         print(f"job {job.id} status={job.status} raw_path={job.raw_path}")
     finally:
@@ -105,13 +114,15 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="app.era5.cli", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("request", help="submit a CDS extract for a spot")
+    p = sub.add_parser("request", help="submit an extract for a spot (Open-Meteo)")
     p.add_argument("spot", help="spot id or slug")
     p.add_argument("--years", type=int, default=20)
+    p.add_argument("--cds", action="store_true", help="use the optional CDS adapter instead")
     p.set_defaults(func=_cmd_request)
 
-    p = sub.add_parser("poll", help="poll a CDS request and store the raw file")
+    p = sub.add_parser("poll", help="fetch the extract and store the raw file")
     p.add_argument("cds_request_id")
+    p.add_argument("--cds", action="store_true", help="use the optional CDS adapter instead")
     p.set_defaults(func=_cmd_poll)
 
     p = sub.add_parser("build", help="derive climatology from the raw file")

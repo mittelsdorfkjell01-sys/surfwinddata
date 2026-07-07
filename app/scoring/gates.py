@@ -42,8 +42,10 @@ def _wave_gates(values: dict, editorial: dict, params: dict) -> list[str]:
     if not direction_in_windows(values.get("swell_dir"), windows):
         reasons.append("swell_direction_unusable")
 
+    # ``editorial.tide`` may be a structured dict (dependence + window) or just a
+    # free-text note ("mid", "n/a"); only the structured form drives the gate.
     tide = editorial.get("tide") or params.get("tide") or {}
-    if tide.get("dependence"):
+    if isinstance(tide, dict) and tide.get("dependence"):
         tv, window = values.get("tide"), tide.get("window")
         if tv is not None and window is not None and not (window[0] <= tv <= window[1]):
             reasons.append("tide_out_of_window")

@@ -14,23 +14,48 @@ import numpy as np
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.era5 import rawfile, seriesutil
 from app.era5.aggregate import aggregate_weekly_histogram, derive_display_stats
 from app.era5.bins import N_WEEKS
 from app.era5.grid import resolve_grid_cell
+from app.era5.openmeteo import (
+    ATTRIBUTION,
+    LICENSE,
+    SOURCE_WAVE,
+    SOURCE_WIND,
+)
+from app.era5.smoothing import smooth_weeks
 from app.era5.solar import filter_daylight
 from app.models import Era5Job, Spot
+
+
+def _wave_window(series: dict) -> str | None:
+    """Year range of the hours that actually carry wave data (waves have a
+    shorter history than wind), or None when the series has no waves."""
+    swh = series.get("swh")
+    if swh is None:
+        return None
+    swh = np.asarray(swh, dtype=float)
+    finite = np.isfinite(swh)
+    if not finite.any():
+        return None
+    times = seriesutil.as_datetime64(series["time"])[finite]
+    y0, y1 = str(times.min())[:4], str(times.max())[:4]
+    return y0 if y0 == y1 else f"{y0}-{y1}"
 
 
 # --- pure core -------------------------------------------------------------
 
 def derive_climatology(
-    series: dict, lat: float, lon: float, window: str
+    series: dict, lat: float, lon: float, window: str, *, smooth_window: int = 3
 ) -> dict:
     """Turn an hourly ``series`` into a 52-week climatology record.
 
     Night-time hours are dropped first; histograms and display statistics are
-    then computed per week over the remaining daytime hours.
+    then computed per week over the remaining daytime hours. The weekly curve is
+    smoothed (rolling window, wrap-around) — the smoothed weeks are the score/
+    display curve, the raw weeks are kept under ``weeks_raw``.
     """
     day_series, daylight_hours = filter_daylight(series, lat, lon)
     histograms = aggregate_weekly_histogram(day_series)
@@ -54,12 +79,29 @@ def derive_climatology(
             }
         )
 
-    return {
-        "source": "ERA5",
+    smoothed = smooth_weeks(week_records, smooth_window)
+
+    record = {
+        "source": SOURCE_WIND,
+        "license": LICENSE,
+        "attribution": ATTRIBUTION,
         "window": window,
+        "smoothing": {"method": "rolling_mean", "window_weeks": smooth_window, "wrap": True},
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "weeks": week_records,
+        "weeks": smoothed,
+        "weeks_raw": week_records,
     }
+
+    wave_window = _wave_window(series)
+    if wave_window:
+        record["wave_source"] = SOURCE_WAVE
+        record["wave_window"] = wave_window
+        record["wave_note"] = (
+            "Wellen-Historie ist kürzer als die Wind-Historie "
+            f"(nur {wave_window}); Wind = {window}."
+        )
+
+    return record
 
 
 def climatology_weeks_equal(a: dict | None, b: dict | None) -> bool:
@@ -113,7 +155,10 @@ def build_climatology_record(spot_id, *, db: Session) -> dict:
         if not spot.era5_cell:
             spot.era5_cell = resolve_grid_cell(lat, lon)
         series = rawfile.read_raw(job.raw_path)
-        record = derive_climatology(series, lat, lon, _window_from_job(job))
+        record = derive_climatology(
+            series, lat, lon, _window_from_job(job),
+            smooth_window=get_settings().climatology_smooth_weeks,
+        )
 
         spot.climatology = record
         job.status = "derived"

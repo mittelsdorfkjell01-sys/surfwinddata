@@ -135,6 +135,13 @@ def test_surf_swell_direction_window():
     assert _surf(1.5, swell_dir=20, editorial=editorial)["rating"] == NO
 
 
+def test_surf_free_text_tide_does_not_crash():
+    # editorial.tide may be a free-text note ("mid", "n/a") rather than a
+    # structured {dependence, window} dict — the gate must tolerate it.
+    assert _surf(1.5, editorial={"tide": "mid"})["rating"] == GOOD
+    assert _surf(1.5, editorial={"tide": "n/a"})["rating"] == GOOD
+
+
 # --- apply_gates directly --------------------------------------------------
 
 def test_apply_gates_returns_reasons_list():

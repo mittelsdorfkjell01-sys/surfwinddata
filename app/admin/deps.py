@@ -10,39 +10,23 @@ from app.admin.stock import StockImageClient, default_stock_client
 from app.config import get_settings
 
 
-class _LazyCdsClient:
-    """Defers building the real ``cdsapi`` client until a method is first called.
+def get_extract_client():
+    """Climatology extraction client — **Open-Meteo Historical** by default.
 
-    Constructing :class:`RealCdsClient` reads ``~/.cdsapirc`` and can raise if the
-    CDS credentials are missing. Doing that eagerly in the FastAPI dependency made
-    ``POST /admin/spots`` fail at resolution time — even though spot creation
-    treats the ERA5 trigger as best-effort. Deferring construction keeps the
-    endpoint working and lets the caller's try/except own any CDS failure.
+    Wind/temperature from the ERA5 archive-api, waves from the marine-api; plain
+    HTTP, no ``cdsapi`` / ``~/.cdsapirc`` needed. Constructing it does no network
+    (fetching happens lazily in ``fetch_series``). Tests override this dependency
+    with a fake client that returns a canned series.
     """
+    from app.era5.openmeteo import OpenMeteoHistoryClient
 
-    def __init__(self) -> None:
-        self._client = None
-
-    def _delegate(self):
-        if self._client is None:
-            from app.era5.cds import real_cds_client
-
-            self._client = real_cds_client()
-        return self._client
-
-    def submit(self, dataset: str, request: dict) -> str:
-        return self._delegate().submit(dataset, request)
-
-    def poll(self, request_id: str) -> str:
-        return self._delegate().poll(request_id)
-
-    def fetch_series(self, request_id: str) -> dict:
-        return self._delegate().fetch_series(request_id)
+    return OpenMeteoHistoryClient()
 
 
-def get_cds_client():
-    """Lazy Copernicus CDS client (built on first use); tests override with a fake."""
-    return _LazyCdsClient()
+# Backward-compatible alias: the seam used to be CDS-specific. Kept so existing
+# dependency overrides (tests) keep working. The optional CDS adapter lives in
+# app.era5.cds.real_cds_client() and is no longer on the default path.
+get_cds_client = get_extract_client
 
 
 def get_stock_client() -> StockImageClient:

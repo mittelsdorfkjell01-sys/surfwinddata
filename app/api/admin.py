@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.admin import regions as admin_regions
 from app.admin import spots as admin_spots
-from app.admin.deps import get_cds_client, get_stock_client, require_admin
+from app.admin.deps import get_extract_client, get_stock_client, require_admin
 from app.admin.jobs import get_job_status, trigger_era5_job
 from app.admin.readiness import validate_spot_readiness
 from app.admin.spots import NotReadyError
@@ -42,7 +42,7 @@ def _actor(x_admin_actor: str | None) -> str:
 def create_spot(
     body: SpotCreate,
     db: Session = Depends(get_db),
-    client=Depends(get_cds_client),
+    client=Depends(get_extract_client),
     x_admin_actor: str | None = Header(default=None),
 ):
     try:
@@ -200,7 +200,7 @@ def go_live(
 def trigger_era5(
     spot_id: uuid.UUID,
     db: Session = Depends(get_db),
-    client=Depends(get_cds_client),
+    client=Depends(get_extract_client),
 ) -> dict:
     try:
         trigger_era5_job(spot_id, db=db, client=client)

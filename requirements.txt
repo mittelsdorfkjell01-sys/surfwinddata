@@ -13,12 +13,14 @@ httpx==0.28.1            # Open-Meteo client (Sprint 3 live path) + test client
 python-multipart==0.0.20  # multipart/form-data parsing for the hero-image upload
 pillow==11.1.0            # server-side hero-image dimension/format validation
 
-# --- ERA5 climatology pipeline (Sprint 2) ---
+# --- Climatology pipeline ---
+# Data source is Open-Meteo Historical (ERA5 via archive-api + waves via
+# marine-api) over plain HTTP (uses httpx, above) — no CDS credentials needed.
 numpy==2.4.6
-pyarrow==18.1.0          # on-disk format for raw ERA5 extracts
-cdsapi==0.7.4            # Copernicus CDS client (only needed for live downloads)
-# Parsing the CDS NetCDF in the live adapter additionally needs xarray + netCDF4;
-# they are optional and intentionally not pinned here (tests inject a fake client).
+pyarrow==18.1.0          # on-disk format for raw extracts (Parquet)
+# OPTIONAL, not on the default path: the Copernicus CDS adapter (app/era5/_real_cds.py)
+# needs `cdsapi` (+ `xarray`/`netCDF4` and ~/.cdsapirc). Install only if you opt into it:
+#   pip install cdsapi xarray netCDF4
 
 # --- Testing ---
 pytest==8.3.4

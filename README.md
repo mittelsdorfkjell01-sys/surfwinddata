@@ -176,9 +176,50 @@ Each job records its `cds_request_id` (in `params`), the request window, and the
 `raw_path` of the downloaded extract. Submission is **idempotent per spot**: a
 non-failed job is reused rather than resubmitted.
 
-### CDS setup (for live downloads)
+### Klimatologie-Datenquelle (Open-Meteo Historical)
 
-Live extracts use the Copernicus Climate Data Store via `cdsapi`:
+The default extraction path is **Open-Meteo Historical**, not CDS — plain HTTP GET
+JSON, no auth, no `~/.cdsapirc`, licence **CC BY 4.0** (`app/era5/openmeteo.py`,
+injected via `app/admin/deps.py::get_extract_client`). Only the *data source*
+changed; the histogram/score/overlay logic is untouched.
+
+| Achse | Quelle | Zeitraum | Auflösung |
+| ----- | ------ | -------- | --------- |
+| **Wind / Temp** | Historical Weather API (ERA5), `archive-api.open-meteo.com` | ~20 Jahre (Default 2006–2025) | stündlich, 0.25° |
+| **Wellen** | Marine API (Wellenmodell), `marine-api.open-meteo.com` | **nur ab ~2022** (geringere Tiefe) | stündlich |
+
+- **Wind** kommt tief und lückenlos aus ERA5. `wind_speed_10m` (in m/s) +
+  `wind_direction_10m` werden in die ERA5-`u/v`-Komponenten umgerechnet, die die
+  Pipeline erwartet; `temperature_2m` (°C → Kelvin).
+- **Wellen** haben bei Open-Meteo nur kurze Historie (belegt in
+  [`Konzept und Prompts/wellen_datenquelle_pruefung.md`](Konzept%20und%20Prompts/wellen_datenquelle_pruefung.md)):
+  archive-api liefert für Wellen nur `null`, die Marine API echte Werte erst ab
+  ~2022. Gewählt wurde **Option (b)** — Wellen über den kürzeren verfügbaren
+  Zeitraum, im Record **klar markiert** (`wave_source`, `wave_window`, `wave_note`).
+  Wind- und Wellenachse teilen eine Zeitachse; die `_swell_joint`-Logik filtert
+  ohnehin auf `isfinite`, sodass Wellen-Stunden vor ~2022 automatisch entfallen.
+  **Kein CDS-Fallback nötig.**
+- **Glättung:** die 52-Wochen-Kurve wird mit einem rollierenden Fenster
+  (`CLIMATOLOGY_SMOOTH_WEEKS`, Default 3, **wrap-around** 52↔1) geglättet — die
+  geglätteten `weeks` sind Anzeige-/Score-Kurve, die Rohkurve bleibt unter
+  `weeks_raw` erhalten.
+- **Roh-Cache:** gezogene Reihen liegen als Parquet unter `ERA5_RAW_DIR/omcache/`
+  (Key = Zelle + Zeitraum). Ein erneuter Lauf zieht **nicht** erneut über das Netz.
+- **Attribution (fürs UI):** „Wetterdaten von Open-Meteo.com, CC BY 4.0".
+- **Overrides** bleiben unberührt: `recompute_climatology` schreibt nur
+  `spots.climatology`, nie `spots.overrides`.
+
+```bash
+python -m app.era5.cli request tarifa-los-lances   # Open-Meteo, kein Login nötig
+python -m app.era5.cli poll <request_id>           # zieht + cached die Reihe
+python -m app.era5.cli build tarifa-los-lances      # 52-Wochen-Klimatologie
+```
+
+### CDS setup (optional fallback — not the default path)
+
+The Copernicus CDS adapter (`app/era5/_real_cds.py`) stays available but is
+**optional** and off the default path (opt in with `... cli request <spot> --cds`).
+It needs `pip install cdsapi xarray netCDF4` and a `~/.cdsapirc`:
 
 1. Create a free account at <https://cds.climate.copernicus.eu/> and accept the
    ERA5 licence.

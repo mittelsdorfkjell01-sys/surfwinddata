@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     # Directory where ERA5 raw extracts (Parquet) are stored by the pipeline.
     era5_raw_dir: str = "data/era5_raw"
 
+    # Rolling window (weeks) used to smooth the 52-week climatology curve
+    # (wrap-around). 1 disables smoothing. 3 = ±1 week.
+    climatology_smooth_weeks: int = 3
+
     # TTL (seconds) for cached Open-Meteo live/forecast responses (30-60 min band).
     live_cache_ttl: int = 1800
 

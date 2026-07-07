@@ -159,9 +159,13 @@ def test_derive_climatology_has_52_weeks_and_plausible_sums():
 
     assert record["window"] == "2006-2025"
     assert len(record["weeks"]) == N_WEEKS
+    # smoothed weeks keep the histogram shape (values are float averages now)
+    assert np.array(record["weeks"][0]["wind"]["joint"]).shape == (N_SECTORS, N_MAG_BINS)
+    assert record["smoothing"]["window_weeks"] == 3
 
+    # The raw (unsmoothed) weeks carry the exact integer invariant:
     total_daylight = 0
-    for wk in record["weeks"]:
+    for wk in record["weeks_raw"]:
         wind = np.array(wk["wind"]["joint"])
         assert wind.shape == (N_SECTORS, N_MAG_BINS)
         # histogram total equals the week's daylight-hour count
