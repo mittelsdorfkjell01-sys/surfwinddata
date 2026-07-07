@@ -34,8 +34,8 @@ export default {
       },
       fontFamily: {
         sans: ["Poppins", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
-        // Rounded display face used only for the "surfwind" wordmark.
-        display: ["Fredoka", "Poppins", "system-ui", "sans-serif"],
+        // Display face used only for the "surfwind" wordmark (local .otf).
+        display: ["MADE Mountain", "Poppins", "system-ui", "sans-serif"],
       },
       boxShadow: {
         card: "0 10px 30px -12px rgba(19, 51, 94, 0.25)",

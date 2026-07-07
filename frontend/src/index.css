@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Wordmark display face ("surfwind data"). Local .otf, served from /public. */
+@font-face {
+  font-family: "MADE Mountain";
+  src: url("/fonts/MADEMountain-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   html,
   body,
@@ -58,9 +67,10 @@
 }
 
 @layer base {
-  /* The rounded "surfwind" wordmark. */
+  /* The "surfwind" wordmark. MADE Mountain ships one weight and is already a
+     heavy display face, so no font-weight is forced (avoids faux-bold). */
   .wordmark {
-    @apply font-display font-semibold tracking-tight;
+    @apply font-display tracking-tight;
   }
 }
 

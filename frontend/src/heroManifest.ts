@@ -7,6 +7,18 @@ export interface HeroVariant {
 
 export const heroManifest: Record<string, HeroVariant> =
 {
+  "hero-surfwind": {
+    "widths": [
+      1280,
+      1920,
+      2560
+    ],
+    "formats": [
+      "webp",
+      "jpg"
+    ],
+    "fallback": "/hero-surfwind-1920.jpg"
+  },
   "hero-laboe": {
     "widths": [
       1280,

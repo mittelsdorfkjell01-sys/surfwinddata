@@ -11,11 +11,10 @@ import TopSpotsRow from "../components/TopSpotsRow";
 export default function Landing() {
   return (
     <div className="relative min-h-screen overflow-hidden">
-      {/* Full-bleed static hero (sport swap removed). Swap in a dedicated asset
-          later; for now a generated hero variant. */}
+      {/* Full-bleed static hero (Frame_1/5 photo). */}
       <div className="absolute inset-0 -z-10">
         <HeroImage
-          src="/hero-welle.jpg"
+          src="/hero-surfwind.jpg"
           alt=""
           className="absolute inset-0 h-full w-full object-cover"
         />
