@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import Header from "../components/Header";
+import LandingHeader from "../components/LandingHeader";
 import HeroImage from "../components/HeroImage";
 import type { Sport } from "../components/SportToggle";
 import SearchBar from "../components/SearchBar";
@@ -25,7 +25,8 @@ const HERO: Record<Sport, string> = {
 };
 
 export default function Landing() {
-  const [sport, setSport] = useState<Sport>("wind");
+  // Static hero for now; the sport toggle moved into the search "Welche?" step.
+  const [sport] = useState<Sport>("wind");
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = parseFilters(searchParams);
   const setFilters = (next: FilterState) =>
@@ -39,7 +40,7 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-white">
-      <Header sport={sport} onSportChange={setSport} />
+      <LandingHeader />
 
       {/* Hero — the search card sits fully on the image, per the mock */}
       <section className="relative">
