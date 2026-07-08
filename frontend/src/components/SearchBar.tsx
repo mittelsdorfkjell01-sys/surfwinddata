@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -35,14 +35,35 @@ export default function SearchBar() {
   const [open, setOpen] = useState<Segment | null>(null);
   const [val, setVal] = useState<SearchValue>(EMPTY_SEARCH);
   const barRef = useRef<HTMLDivElement>(null);
+  const whereRef = useRef<HTMLDivElement>(null);
   const whereInput = useRef<HTMLInputElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
+  // Measured content height so the panel can animate its height (real px, not a
+  // distorting scale transform) as we switch fields or the content reflows.
+  const [panelH, setPanelH] = useState<number | null>(null);
 
-  const openSeg = (s: Segment) => {
-    setRect(barRef.current?.getBoundingClientRect() ?? null);
+  // Panel geometry: "Wann?" needs the full bar width for its two-month calendar;
+  // "Wohin?" and "Welche?" only span their own field.
+  const openSeg = (s: Segment, el: HTMLElement | null) => {
+    const source = s === "when" ? barRef.current : el;
+    setRect(source?.getBoundingClientRect() ?? null);
     setOpen(s);
   };
   const close = () => setOpen(null);
+
+  // Track the open panel's natural height (capped at 70vh) so height changes —
+  // between segments and when content reflows (typing, reset row) — animate.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const el = contentRef.current;
+    if (!el) return;
+    const measure = () => setPanelH(Math.min(el.offsetHeight, window.innerHeight * 0.7));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [open]);
 
   // While open: Esc closes, and scroll/resize collapse the panel (positions are
   // captured at open time).
@@ -86,11 +107,12 @@ export default function SearchBar() {
         <div className="flex items-stretch gap-1 rounded-full bg-white p-2 shadow-card">
           {/* Wohin? — bears the text input */}
           <div
+            ref={whereRef}
             className={`flex flex-1 flex-col rounded-full px-6 py-2 text-left transition-all ${
               open === "where" ? "shadow-pill" : ""
             } ${dim("where") ? "opacity-55" : ""}`}
             onClick={() => {
-              openSeg("where");
+              openSeg("where", whereRef.current);
               whereInput.current?.focus();
             }}
           >
@@ -98,7 +120,7 @@ export default function SearchBar() {
             <input
               ref={whereInput}
               value={val.whereText}
-              onFocus={() => openSeg("where")}
+              onFocus={() => openSeg("where", whereRef.current)}
               onChange={(e) =>
                 setVal((v) => ({ ...v, whereText: e.target.value, whereSel: null }))
               }
@@ -117,7 +139,7 @@ export default function SearchBar() {
             value={whenLabel(val.when)}
             active={open === "when"}
             dim={dim("when")}
-            onClick={() => openSeg("when")}
+            onClick={(el) => openSeg("when", el)}
           />
 
           <Divider />
@@ -128,7 +150,7 @@ export default function SearchBar() {
             value={whichText}
             active={open === "which"}
             dim={dim("which")}
-            onClick={() => openSeg("which")}
+            onClick={(el) => openSeg("which", el)}
           />
 
           <button
@@ -159,29 +181,63 @@ export default function SearchBar() {
                 key="panel"
                 role="dialog"
                 aria-modal="false"
-                initial={{ opacity: 0, y: reduce ? 0 : -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: reduce ? 0 : -8 }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-                style={{
-                  position: "fixed",
+                // Seed position/width in `initial` too so the panel mounts in
+                // place (no fly-in from <body>'s default corner); switching
+                // fields keeps the element mounted, so those still morph.
+                initial={{
+                  opacity: 0,
+                  y: reduce ? 0 : -8,
                   top: rect.bottom + 12,
                   left: rect.left,
                   width: rect.width,
-                  zIndex: 1150,
                 }}
-                className="max-h-[70vh] overflow-auto rounded-3xl bg-white p-6 shadow-card"
+                animate={{
+                  opacity: 1,
+                  y: 0,
+                  top: rect.bottom + 12,
+                  left: rect.left,
+                  width: rect.width,
+                  ...(panelH != null ? { height: panelH } : {}),
+                }}
+                exit={{ opacity: 0, y: reduce ? 0 : -8 }}
+                transition={
+                  reduce
+                    ? { duration: 0 }
+                    : {
+                        // Spring the box (position/width/height) between fields;
+                        // fade opacity on the quicker linear track.
+                        type: "spring",
+                        stiffness: 420,
+                        damping: 40,
+                        mass: 0.7,
+                        opacity: { duration: 0.18, ease: "easeOut" },
+                      }
+                }
+                style={{ position: "fixed", zIndex: 1150 }}
+                className="overflow-hidden rounded-3xl bg-white shadow-card"
               >
-                {open === "where" && <SearchWhere query={val.whereText} onPick={pickWhere} />}
-                {open === "when" && (
-                  <SearchWhen value={val.when} onChange={(when) => setVal((v) => ({ ...v, when }))} />
-                )}
-                {open === "which" && (
-                  <SearchWhich
-                    value={val.which}
-                    onChange={(which) => setVal((v) => ({ ...v, which }))}
-                  />
-                )}
+                <div ref={contentRef} className="max-h-[70vh] overflow-auto p-6">
+                  <motion.div
+                    key={open}
+                    initial={reduce ? false : { opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                  >
+                    {open === "where" && <SearchWhere query={val.whereText} onPick={pickWhere} />}
+                    {open === "when" && (
+                      <SearchWhen
+                        value={val.when}
+                        onChange={(when) => setVal((v) => ({ ...v, when }))}
+                      />
+                    )}
+                    {open === "which" && (
+                      <SearchWhich
+                        value={val.which}
+                        onChange={(which) => setVal((v) => ({ ...v, which }))}
+                      />
+                    )}
+                  </motion.div>
+                </div>
               </motion.div>
             </>
           )}
@@ -209,12 +265,12 @@ function Segment({
   value: string;
   active: boolean;
   dim: boolean;
-  onClick: () => void;
+  onClick: (el: HTMLElement) => void;
 }) {
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={(e) => onClick(e.currentTarget)}
       aria-expanded={active}
       className={`flex flex-1 flex-col items-start rounded-full px-6 py-2 text-left transition-all ${
         active ? "shadow-pill" : ""

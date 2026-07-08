@@ -52,17 +52,18 @@ export default function SearchWhere({
   const q = query.trim().toLowerCase();
   const spotHits = (spots ?? [])
     .filter((s) => !q || s.name.toLowerCase().includes(q))
-    .slice(0, 8);
+    .slice(0, 6);
   const regionHits = (regions ?? [])
     .filter((r) => !q || r.name.toLowerCase().includes(q))
-    .slice(0, 6);
+    .slice(0, 5);
 
+  // Single narrow column: the panel is only as wide as the "Wohin?" field.
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_1px_260px]">
+    <div className="flex flex-col gap-5">
       <div>
-        <h3 className="mb-3 text-[13px] font-medium text-muted">Spots</h3>
+        <h3 className="mb-2 text-[13px] font-medium text-muted">Spots</h3>
         {spotHits.length ? (
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+          <div className="flex flex-col gap-0.5">
             {spotHits.map((s) => {
               const country = regionById.get(s.regionId ?? "")?.country ?? null;
               return (
@@ -80,10 +81,12 @@ export default function SearchWhere({
         ) : (
           <p className="text-[13px] text-muted">Keine Spots gefunden.</p>
         )}
+      </div>
 
-        <h3 className="mb-3 mt-6 text-[13px] font-medium text-muted">Regionen</h3>
+      <div>
+        <h3 className="mb-2 text-[13px] font-medium text-muted">Regionen</h3>
         {regionHits.length ? (
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+          <div className="flex flex-col gap-0.5">
             {regionHits.map((r) => (
               <Row
                 key={r.id}
@@ -100,12 +103,10 @@ export default function SearchWhere({
         )}
       </div>
 
-      <div className="hidden bg-line md:block" />
-
-      <div>
-        <h3 className="mb-3 text-[13px] font-medium text-muted">Zuletzt gesucht</h3>
+      <div className="border-t border-line pt-4">
+        <h3 className="mb-2 text-[13px] font-medium text-muted">Zuletzt gesucht</h3>
         {recent.length ? (
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-0.5">
             {recent.map((r, i) => (
               <Row
                 key={`${r.label}-${i}`}

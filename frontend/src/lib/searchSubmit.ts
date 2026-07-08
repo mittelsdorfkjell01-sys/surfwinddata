@@ -5,9 +5,14 @@
 // marked `// TODO backend` — they are NOT invented endpoints, just forward-compat
 // hints the current backend ignores.
 
+/** Flexible-search duration, combinable with a month (e.g. "best weekend in January"). */
+export type WhenDuration = "weekend" | "week" | "twoweeks";
+
 export type WhenValue =
-  | { mode: "month"; month: number } // 1..12
+  // Explicit calendar range (left side of the "Wann?" panel).
   | { mode: "range"; from: string; to?: string } // yyyy-mm-dd
+  // Flexible: a month and/or a duration (right side). At least one is set.
+  | { mode: "flex"; month?: number; duration?: WhenDuration } // month 1..12
   | null;
 
 export interface WhereSelection {
@@ -48,7 +53,7 @@ export function weekOfMonth(month1to12: number, year = new Date().getFullYear())
 
 export function weekFromWhen(when: WhenValue): number | undefined {
   if (!when) return undefined;
-  if (when.mode === "month") return weekOfMonth(when.month);
+  if (when.mode === "flex") return when.month ? weekOfMonth(when.month) : undefined;
   if (when.mode === "range" && when.from) return isoWeek(new Date(when.from));
   return undefined;
 }
@@ -72,6 +77,14 @@ export function buildSearchParams(v: SearchValue): URLSearchParams {
     p.set("from", v.when.from); // TODO backend
     if (v.when.to) p.set("to", v.when.to); // TODO backend
   }
+  if (v.when?.mode === "flex") {
+    // Flexible month/duration search ("best weekend in January"): the current
+    // backend only ranks a single representative `week` (set above), so the
+    // month + duration are forwarded for a future "best window" ranking.
+    p.set("flex", "1"); // TODO backend
+    if (v.when.month) p.set("month", String(v.when.month)); // TODO backend
+    if (v.when.duration) p.set("duration", v.when.duration); // TODO backend
+  }
   return p;
 }
 
@@ -80,9 +93,19 @@ const MONTHS_FULL = [
   "Januar", "Februar", "März", "April", "Mai", "Juni",
   "Juli", "August", "September", "Oktober", "November", "Dezember",
 ];
+const DURATION_LABEL: Record<WhenDuration, string> = {
+  weekend: "ein Wochenende",
+  week: "eine Woche",
+  twoweeks: "zwei Wochen",
+};
 export function whenLabel(when: WhenValue): string {
   if (!when) return "";
-  if (when.mode === "month") return MONTHS_FULL[when.month - 1];
+  if (when.mode === "flex") {
+    const parts: string[] = [];
+    if (when.month) parts.push(MONTHS_FULL[when.month - 1]);
+    if (when.duration) parts.push(DURATION_LABEL[when.duration]);
+    return parts.join(" · ");
+  }
   const fmt = (iso: string) => {
     const d = new Date(iso);
     return `${d.getDate()}.${d.getMonth() + 1}.`;

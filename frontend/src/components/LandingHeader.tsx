@@ -43,7 +43,7 @@ export default function LandingHeader() {
 
   return (
     <header className="pointer-events-none absolute inset-x-0 top-0 z-[1000]">
-      <div className="mx-auto max-w-[1500px] px-4 pt-5 sm:px-10 sm:pt-7">
+      <div className="mx-auto max-w-[1500px] px-4 pt-9 sm:px-10 sm:pt-12">
         <div className="pointer-events-auto grid grid-cols-[1fr_auto_1fr] items-center gap-4">
           {/* Left — caps tagline */}
           <span className="hidden select-none text-[12px] font-medium uppercase tracking-[0.14em] text-white/90 sm:block">
@@ -52,8 +52,8 @@ export default function LandingHeader() {
 
           {/* Centre — wordmark */}
           <Link to="/" className="col-start-2 select-none justify-self-center leading-none">
-            <span className="wordmark text-[30px] text-brand-orange sm:text-[34px]">surfwind</span>
-            <span className="wordmark ml-1 align-baseline text-[15px] text-brand-teal sm:text-[17px]">
+            <span className="wordmark text-[46px] text-brand-orange sm:text-[58px]">surfwind</span>
+            <span className="wordmark ml-1.5 align-baseline text-[22px] text-brand-teal sm:text-[28px]">
               data
             </span>
           </Link>

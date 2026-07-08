@@ -1,9 +1,12 @@
-// "Wann?" panel (Frame_3): a two-month calendar (date range) OR a month chip,
-// plus quick-range chips. Range and month modes reset each other.
+// "Wann?" panel (Frame_3). Two ways to say "when", which are mutually exclusive:
+//  • LEFT  — a two-month calendar for an explicit date range.
+//  • RIGHT — a flexible pick: a month AND/OR a duration (e.g. "January + a
+//    weekend" → the backend finds the best weekend(s) in that month).
+// Touching one side greys out + disables the other; "Zurücksetzen" clears both.
 
 import { useState } from "react";
 import type { SVGProps } from "react";
-import type { WhenValue } from "../../lib/searchSubmit";
+import type { WhenDuration, WhenValue } from "../../lib/searchSubmit";
 
 const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const MONTHS_SHORT = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OKT", "NOV", "DEC"];
@@ -57,7 +60,13 @@ export default function SearchWhen({
   const [anchor, setAnchor] = useState({ y: today.getFullYear(), m: today.getMonth() });
 
   const range = value?.mode === "range" ? value : null;
-  const selMonth = value?.mode === "month" ? value.month : null;
+  const flex = value?.mode === "flex" ? value : null;
+  const selMonth = flex?.month ?? null;
+  const selDuration = flex?.duration ?? null;
+
+  // A choice on one side locks the other until reset.
+  const calDisabled = value?.mode === "flex";
+  const flexDisabled = value?.mode === "range";
 
   const clickDay = (d: Date) => {
     const iso = toISO(d);
@@ -72,15 +81,24 @@ export default function SearchWhen({
     );
   };
 
-  const pickMonth = (m1: number) =>
-    onChange(selMonth === m1 ? null : { mode: "month", month: m1 });
-
-  const quick = (days: number) => {
-    const from = new Date();
-    const to = new Date();
-    to.setDate(to.getDate() + days);
-    onChange({ mode: "range", from: toISO(from), to: toISO(to) });
+  // Merge a month/duration change into the flexible pick; clearing both → null.
+  const setFlex = (next: { month?: number; duration?: WhenDuration }) => {
+    const month = "month" in next ? next.month : flex?.month;
+    const duration = "duration" in next ? next.duration : flex?.duration;
+    if (!month && !duration) {
+      onChange(null);
+      return;
+    }
+    onChange({
+      mode: "flex",
+      ...(month ? { month } : {}),
+      ...(duration ? { duration } : {}),
+    });
   };
+
+  const pickMonth = (m1: number) => setFlex({ month: selMonth === m1 ? undefined : m1 });
+  const pickDuration = (d: WhenDuration) =>
+    setFlex({ duration: selDuration === d ? undefined : d });
 
   const inRange = (d: Date) => {
     if (!range?.from) return false;
@@ -98,7 +116,12 @@ export default function SearchWhen({
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
-      <div className="flex flex-1 gap-8">
+      <div
+        aria-disabled={calDisabled}
+        className={`flex flex-1 gap-8 transition-opacity ${
+          calDisabled ? "pointer-events-none opacity-40" : ""
+        }`}
+      >
         {months.map((mm, idx) => (
           <div key={idx} className="flex-1">
             <div className="mb-3 flex items-center justify-between">
@@ -154,36 +177,67 @@ export default function SearchWhen({
       </div>
 
       <div className="lg:w-[220px]">
-        <div className="grid grid-cols-4 gap-2">
-          {MONTHS_SHORT.map((mon, i) => (
-            <button
-              key={mon}
-              type="button"
-              onClick={() => pickMonth(i + 1)}
-              className={`rounded-lg border px-2 py-2 text-[12px] font-medium transition-colors ${
-                selMonth === i + 1
-                  ? "border-brand-orange bg-brand-orange/10 text-brand-orange"
-                  : "border-line text-brand-teal hover:border-brand-teal"
-              }`}
-            >
-              {mon}
-            </button>
-          ))}
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {([["Ein Wochenende", 2], ["Eine Woche", 7], ["zwei Wochen", 14]] as const).map(
-            ([label, days]) => (
+        <div
+          aria-disabled={flexDisabled}
+          className={`transition-opacity ${
+            flexDisabled ? "pointer-events-none opacity-40" : ""
+          }`}
+        >
+          <p className="mb-2 text-[12px] font-medium text-muted">Monat</p>
+          <div className="grid grid-cols-4 gap-2">
+            {MONTHS_SHORT.map((mon, i) => (
               <button
-                key={label}
+                key={mon}
                 type="button"
-                onClick={() => quick(days)}
-                className="rounded-full border border-line px-3 py-1.5 text-[12px] text-brand-teal transition-colors hover:border-brand-teal"
+                onClick={() => pickMonth(i + 1)}
+                className={`rounded-lg border px-2 py-2 text-[12px] font-medium transition-colors ${
+                  selMonth === i + 1
+                    ? "border-brand-orange bg-brand-orange/10 text-brand-orange"
+                    : "border-line text-brand-teal hover:border-brand-teal"
+                }`}
+              >
+                {mon}
+              </button>
+            ))}
+          </div>
+
+          <p className="mb-2 mt-4 text-[12px] font-medium text-muted">Zeitspanne</p>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                ["Ein Wochenende", "weekend"],
+                ["Eine Woche", "week"],
+                ["zwei Wochen", "twoweeks"],
+              ] as const
+            ).map(([label, dur]) => (
+              <button
+                key={dur}
+                type="button"
+                onClick={() => pickDuration(dur)}
+                className={`rounded-full border px-3 py-1.5 text-[12px] transition-colors ${
+                  selDuration === dur
+                    ? "border-brand-orange bg-brand-orange/10 text-brand-orange"
+                    : "border-line text-brand-teal hover:border-brand-teal"
+                }`}
               >
                 {label}
               </button>
-            )
-          )}
+            ))}
+          </div>
         </div>
+
+        {/* Always rendered (just hidden when empty) so showing it doesn't grow the panel. */}
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          aria-hidden={!value}
+          tabIndex={value ? 0 : -1}
+          className={`mt-5 text-[12px] font-medium text-brand-teal underline underline-offset-2 transition-colors hover:text-brand-teal-dark ${
+            value ? "" : "invisible"
+          }`}
+        >
+          Zurücksetzen
+        </button>
       </div>
     </div>
   );
