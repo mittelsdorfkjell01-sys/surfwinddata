@@ -161,7 +161,10 @@ def get_spot_season(
     if resolved_sport is None:
         raise HTTPException(status_code=422, detail="No sport to score")
     profile = {"level": level} if level else None
-    result = score_climatology_curve(spot_id, profile, resolved_sport, db=db)
+    try:
+        result = score_climatology_curve(spot_id, profile, resolved_sport, db=db)
+    except KeyError:
+        raise HTTPException(status_code=422, detail=f"Unknown sport {resolved_sport!r}")
     return {"stage": 2, "spot_id": spot.id, **result}
 
 

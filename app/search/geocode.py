@@ -18,17 +18,22 @@ GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 _AREA_PREFIXES = ("PCL", "ADM", "ISL", "RGN", "CONT", "AREA", "TERR")
 
 # Approximate half-size (degrees) for an area bbox when the geocoder gives no
-# bounding box, keyed by the broad feature kind.
+# bounding box (the Open-Meteo geocoder never does). Sized so the box actually
+# covers the spots that belong to the area: a large Mediterranean/Atlantic island
+# like Sardinia or Sicily spans ~2° of latitude, so a 0.6° island box missed all
+# of its spots — an area search that returns nothing is worse than one that also
+# includes a little surrounding sea (empty of spots anyway; ranking sorts by
+# distance regardless). An explicit ``bbox`` from the geocoder always wins.
 _AREA_HALFSIZE_DEG = {
     "PCL": 5.0,   # country
-    "ADM": 1.0,   # admin division
-    "ISL": 0.6,   # island
-    "RGN": 1.0,
+    "ADM": 1.5,   # admin division
+    "ISL": 2.0,   # island (large Med/Atlantic islands span ~2° lat)
+    "RGN": 1.5,
     "CONT": 20.0,
-    "AREA": 1.0,
+    "AREA": 1.5,
     "TERR": 2.0,
 }
-_DEFAULT_HALFSIZE_DEG = 1.0
+_DEFAULT_HALFSIZE_DEG = 1.5
 
 
 @dataclass
