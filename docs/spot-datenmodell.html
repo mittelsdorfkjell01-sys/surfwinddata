@@ -1,0 +1,418 @@
+<title>Spot-Datenmodell — was wir pro Spot brauchen</title>
+<style>
+  :root {
+    --bg: #FBF6EF;
+    --surface: #FFFFFF;
+    --zebra: #FBF7F1;
+    --ink: #14243B;
+    --ink-soft: #2C4E7E;
+    --muted: #6E7787;
+    --line: #E7DfD2;
+    --line-strong: #DBD1C1;
+    --teal: #1E6E7E;
+    --teal-deep: #17586A;
+    --orange: #D9772F;
+    --blue: #3E72A8;
+    --green: #3E8E76;
+    --shadow: 0 10px 30px -14px rgba(20, 36, 59, 0.28);
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0B2137;
+      --surface: #102C48;
+      --zebra: #12314F;
+      --ink: #ECF2F6;
+      --ink-soft: #C6D5E1;
+      --muted: #93A6B8;
+      --line: rgba(255, 255, 255, 0.10);
+      --line-strong: rgba(255, 255, 255, 0.18);
+      --teal: #5CB2C1;
+      --teal-deep: #82C7D2;
+      --orange: #EC9A5C;
+      --blue: #6FA3D6;
+      --green: #5FB79B;
+      --shadow: 0 12px 34px -16px rgba(0, 0, 0, 0.6);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #FBF6EF; --surface: #FFFFFF; --zebra: #FBF7F1; --ink: #14243B;
+    --ink-soft: #2C4E7E; --muted: #6E7787; --line: #E7DfD2; --line-strong: #DBD1C1;
+    --teal: #1E6E7E; --teal-deep: #17586A; --orange: #D9772F; --blue: #3E72A8;
+    --green: #3E8E76; --shadow: 0 10px 30px -14px rgba(20, 36, 59, 0.28);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0B2137; --surface: #102C48; --zebra: #12314F; --ink: #ECF2F6;
+    --ink-soft: #C6D5E1; --muted: #93A6B8; --line: rgba(255,255,255,0.10);
+    --line-strong: rgba(255,255,255,0.18); --teal: #5CB2C1; --teal-deep: #82C7D2;
+    --orange: #EC9A5C; --blue: #6FA3D6; --green: #5FB79B;
+    --shadow: 0 12px 34px -16px rgba(0,0,0,0.6);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: clamp(1.5rem, 4vw, 4rem) clamp(1rem, 4vw, 2.5rem) 5rem;
+  }
+
+  /* header */
+  .eyebrow {
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--teal);
+    margin: 0 0 0.75rem;
+  }
+  h1 {
+    font-size: clamp(1.9rem, 5vw, 3rem);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    font-weight: 800;
+    margin: 0 0 0.6rem;
+    text-wrap: balance;
+  }
+  h1 .accent { color: var(--orange); }
+  .lede {
+    font-size: clamp(1rem, 1.6vw, 1.15rem);
+    color: var(--ink-soft);
+    max-width: 62ch;
+    margin: 0 0 2rem;
+  }
+
+  /* legend */
+  .legend {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+    gap: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 1.1rem 1.25rem;
+    box-shadow: var(--shadow);
+    margin-bottom: 1rem;
+  }
+  .legend h3 {
+    font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 0.6rem; font-weight: 700;
+  }
+  .legend .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+  /* callout */
+  .callout {
+    display: flex; gap: 0.85rem; align-items: flex-start;
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--orange);
+    background: color-mix(in srgb, var(--orange) 9%, var(--surface));
+    border-radius: 12px;
+    padding: 0.95rem 1.15rem;
+    margin: 0 0 2.75rem;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+  }
+  .callout strong { color: var(--ink); }
+  .callout .mark {
+    flex: none; width: 1.5rem; height: 1.5rem; border-radius: 50%;
+    background: var(--orange); color: #fff; display: grid; place-items: center;
+    font-weight: 800; font-size: 0.9rem;
+  }
+
+  /* sections */
+  section { margin-top: 2.75rem; }
+  .sec-head { border-bottom: 2px solid var(--line-strong); padding-bottom: 0.55rem; margin-bottom: 0.35rem; }
+  h2 {
+    font-size: clamp(1.15rem, 2.4vw, 1.5rem);
+    letter-spacing: -0.01em; font-weight: 750; margin: 0;
+    display: flex; align-items: baseline; gap: 0.6rem;
+  }
+  h2 .tag {
+    font-family: var(--mono); font-size: 0.68rem; font-weight: 600;
+    letter-spacing: 0.02em; color: var(--teal);
+    background: color-mix(in srgb, var(--teal) 12%, transparent);
+    padding: 0.12rem 0.5rem; border-radius: 999px;
+    text-transform: none;
+  }
+  .sec-note { color: var(--muted); font-size: 0.9rem; margin: 0.5rem 0 0; max-width: 68ch; }
+
+  /* tables */
+  .tscroll { overflow-x: auto; margin-top: 1rem; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 640px; }
+  thead th {
+    text-align: left; font-size: 0.68rem; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700; padding: 0.7rem 0.9rem;
+    border-bottom: 1px solid var(--line-strong); white-space: nowrap;
+    position: sticky; top: 0; background: var(--surface);
+  }
+  tbody td { padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--zebra); }
+  .field { font-family: var(--mono); font-size: 0.82rem; color: var(--ink); font-weight: 600; white-space: nowrap; }
+  .desc { color: var(--ink); }
+  .vals { color: var(--muted); font-size: 0.86rem; }
+  .vals code {
+    font-family: var(--mono); font-size: 0.8em;
+    background: color-mix(in srgb, var(--teal) 9%, transparent);
+    color: var(--teal-deep); padding: 0.05rem 0.32rem; border-radius: 5px;
+    white-space: nowrap;
+  }
+
+  /* chips */
+  .chip {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    font-size: 0.72rem; font-weight: 650; letter-spacing: 0.01em;
+    padding: 0.16rem 0.55rem; border-radius: 999px; white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .chip::before { content: ""; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; opacity: 0.9; }
+  .src-red { color: var(--orange); background: color-mix(in srgb, var(--orange) 13%, transparent); }
+  .src-auto { color: var(--teal-deep); background: color-mix(in srgb, var(--teal) 13%, transparent); }
+  .src-clim { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
+  .src-live { color: var(--blue); background: color-mix(in srgb, var(--blue) 14%, transparent); }
+
+  .req { border: 1px solid; padding: 0.14rem 0.5rem; }
+  .req::before { display: none; }
+  .req-must { color: #fff; background: var(--orange); border-color: var(--orange); }
+  .req-rec { color: var(--teal-deep); border-color: color-mix(in srgb, var(--teal) 45%, transparent); background: transparent; }
+  .req-opt { color: var(--muted); border-color: var(--line-strong); background: transparent; }
+  .req-auto { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, transparent); background: transparent; }
+
+  footer {
+    margin-top: 3.5rem; padding-top: 1.5rem; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 0.82rem; max-width: 72ch;
+  }
+  footer code { font-family: var(--mono); color: var(--teal-deep); font-size: 0.9em; }
+  a { color: var(--teal-deep); }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">surfwind&nbsp;data · Datenmodell</p>
+    <h1>Was wir pro <span class="accent">Spot</span> brauchen</h1>
+    <p class="lede">
+      Vollständige Feld-Referenz für einen Spot — von Ort und Disziplin über die
+      52-Wochen-Klimatologie (Windmonate &amp; beste Reisezeit) bis zu Live-Wetter
+      und Bewertung. Manuell gepflegte, automatisch abgeleitete und zur Laufzeit
+      geladene Daten sind farblich getrennt.
+    </p>
+  </header>
+
+  <div class="legend">
+    <div>
+      <h3>Quelle</h3>
+      <div class="chips">
+        <span class="chip src-red">Redaktion</span>
+        <span class="chip src-auto">Automatisch</span>
+        <span class="chip src-clim">Klima-Batch</span>
+        <span class="chip src-live">Live</span>
+      </div>
+    </div>
+    <div>
+      <h3>Status</h3>
+      <div class="chips">
+        <span class="chip req req-must">Pflicht</span>
+        <span class="chip req req-rec">Empfohlen</span>
+        <span class="chip req req-opt">Optional</span>
+        <span class="chip req req-auto">abgeleitet</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <span class="mark">!</span>
+    <div>
+      <strong>„Live" geht nur vollständig.</strong> Ein Spot wird erst
+      <em>published</em>, wenn alle <span class="chip req req-must" style="vertical-align:middle">Pflicht</span>-Felder
+      gefüllt sind (oder explizit als <code style="font-family:var(--mono)">n/a</code> markiert),
+      <strong>plus</strong> eine abgeleitete Klimatologie und ein vollständig
+      kreditiertes Bild vorliegen. Empfohlene Felder erscheinen in der Checkliste, blockieren aber nicht.
+    </div>
+  </div>
+
+  <!-- A -->
+  <section>
+    <div class="sec-head"><h2>Identität &amp; Ort <span class="tag">spots</span></h2></div>
+    <p class="sec-note">Wer der Spot ist und wo er liegt — die Koordinaten treiben alles Klima- und Live-Nachgelagerte.</p>
+    <div class="tscroll"><table>
+      <thead><tr><th>Feld</th><th>Beschreibung</th><th>Werte / Typ</th><th>Quelle</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="field">name</td><td class="desc">Anzeigename des Spots</td><td class="vals">Text</td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-must">Pflicht</span></td></tr>
+        <tr><td class="field">slug</td><td class="desc">URL-Kennung, eindeutig</td><td class="vals">Text, aus <code>name</code></td><td><span class="chip src-auto">Automatisch</span></td><td><span class="chip req req-must">Pflicht</span></td></tr>
+        <tr><td class="field">region</td><td class="desc">Zugehörige Region</td><td class="vals">Referenz (28 Regionen)</td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-must">Pflicht</span></td></tr>
+        <tr><td class="field">location</td><td class="desc">Geokoordinaten des Spots</td><td class="vals"><code>lat</code>, <code>lon</code> (WGS84)</td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-must">Pflicht</span></td></tr>
+        <tr><td class="field">era5_cell</td><td class="desc">Klima-Gitterzelle für die Reanalyse</td><td class="vals">Wind 0,25° · Welle 0,5°</td><td><span class="chip src-auto">Automatisch</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+        <tr><td class="field">status</td><td class="desc">Sichtbarkeit / Workflow-Zustand</td><td class="vals"><code>draft</code> · <code>published</code></td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-must">Pflicht</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- B -->
+  <section>
+    <div class="sec-head"><h2>Sportarten &amp; Disziplinen</h2></div>
+    <p class="sec-note">Was man hier machen kann. Die Sportart entscheidet, nach welchem Regelwerk der Spot bewertet wird.</p>
+    <div class="tscroll"><table>
+      <thead><tr><th>Feld</th><th>Beschreibung</th><th>Werte / Typ</th><th>Quelle</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="field">sports</td><td class="desc">Mögliche Sportarten (mehrfach)</td><td class="vals"><code>kitesurf</code> · <code>windsurf</code> · <code>wing</code> · <code>surf</code></td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-must">Pflicht</span></td></tr>
+        <tr><td class="field">disciplines</td><td class="desc">Disziplinen (Filter, mehrfach)</td><td class="vals"><code>freestyle</code> · <code>big_air</code> · <code>foil</code></td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-opt">Optional</span></td></tr>
+        <tr><td class="field">style</td><td class="desc">Eignung für Fahrstile</td><td class="vals"><code>freeride</code> · <code>freestyle</code> · <code>big_air</code> · <code>wave_riding</code></td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-rec">Empfohlen</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- C -->
+  <section>
+    <div class="sec-head"><h2>Charakter &amp; Einstufung</h2></div>
+    <p class="sec-note">Wie sich der Spot anfühlt und für wen er taugt — die Basis für Filter, Ähnlichkeit und niveauabhängige Bewertung.</p>
+    <div class="tscroll"><table>
+      <thead><tr><th>Feld</th><th>Beschreibung</th><th>Werte / Typ</th><th>Quelle</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="field">level</td><td class="desc">Könnerstufe</td><td class="vals">Anfänger · Fortgeschritten · Könner · Profi</td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-must">Pflicht</span></td></tr>
+        <tr><td class="field">water_type</td><td class="desc">Gewässertyp</td><td class="vals">z. B. Meer · Lagune · See</td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-must">Pflicht</span></td></tr>
+        <tr><td class="field">water_character</td><td class="desc">Wasserbild</td><td class="vals">Flachwasser · Chop · Kleine/Große Welle · Tiefes Wasser</td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-must">Pflicht</span></td></tr>
+        <tr><td class="field">bottom_type</td><td class="desc">Untergrund</td><td class="vals">z. B. Sand · Riff · Kies</td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-must">Pflicht</span></td></tr>
+        <tr><td class="field">facing</td><td class="desc">Ausrichtung der Küste/Strand (Blick aufs Wasser) — für Onshore/Offshore</td><td class="vals">0–360°</td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-rec">Empfohlen</span></td></tr>
+        <tr><td class="field">confidence</td><td class="desc">Verlässlichkeit der Angaben</td><td class="vals">0–1</td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-opt">Optional</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- D -->
+  <section>
+    <div class="sec-head"><h2>Nutzbare Bedingungen <span class="tag">editorial</span></h2></div>
+    <p class="sec-note">Redaktionelles Wissen, das kein Wettermodell kennt — fließt direkt in die Bewertung ein.</p>
+    <div class="tscroll"><table>
+      <thead><tr><th>Feld</th><th>Beschreibung</th><th>Werte / Typ</th><th>Quelle</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="field">editorial.description</td><td class="desc">Textbeschreibung des Spots</td><td class="vals">Fließtext</td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-must">Pflicht</span></td></tr>
+        <tr><td class="field">editorial.usable_wind_directions</td><td class="desc">Nutzbare Windrichtungen</td><td class="vals">Sektoren, z. B. NW–NO</td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-must">Pflicht (Wind-Sportarten)</span></td></tr>
+        <tr><td class="field">editorial.tide</td><td class="desc">Gezeitenabhängigkeit</td><td class="vals">ja/nein + Hinweis</td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-must">Pflicht (Surf)</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- E -->
+  <section>
+    <div class="sec-head"><h2>Klimatologie — 52 Wochen <span class="tag">climatology</span></h2></div>
+    <p class="sec-note">
+      Aus ~20 Jahren Open-Meteo-Reanalyse (Wind/Temp) + Wellenmodell wird pro Spot
+      eine Woche-für-Woche-Klimatologie abgeleitet (Batch, einmalig). Sie ist die
+      Grundlage für „Windmonate" und die beste Reisezeit weiter unten. Jede der 52
+      Wochen trägt diese Werte:
+    </p>
+    <div class="tscroll"><table>
+      <thead><tr><th>Feld (je Woche)</th><th>Beschreibung</th><th>Werte / Typ</th><th>Quelle</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="field">window</td><td class="desc">Referenzzeitraum der Klimatologie</td><td class="vals">z. B. 2006–2025 (20 J)</td><td><span class="chip src-clim">Klima-Batch</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+        <tr><td class="field">wind.p10 / p50 / p90</td><td class="desc">Windstärke-Verteilung der Woche</td><td class="vals">Knoten</td><td><span class="chip src-clim">Klima-Batch</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+        <tr><td class="field">wind.dominant_dir</td><td class="desc">Hauptwindrichtung der Woche</td><td class="vals">16 Sektoren (0 = N)</td><td><span class="chip src-clim">Klima-Batch</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+        <tr><td class="field">wind.joint[16×6]</td><td class="desc">Häufigkeit Richtung × Stärke (Histogramm)</td><td class="vals">Zähl-Matrix</td><td><span class="chip src-clim">Klima-Batch</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+        <tr><td class="field">swell.p10 / p50 / p90</td><td class="desc">Wellenhöhe der Woche</td><td class="vals">Meter</td><td><span class="chip src-clim">Klima-Batch</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+        <tr><td class="field">swell.period / dir / joint</td><td class="desc">Periode, Richtung, Richtung×Höhe-Histogramm</td><td class="vals">s · Sektor · Matrix</td><td><span class="chip src-clim">Klima-Batch</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+        <tr><td class="field">air_p50_c / sst_p50_c</td><td class="desc">Luft- &amp; Wassertemperatur (Median)</td><td class="vals">°C</td><td><span class="chip src-clim">Klima-Batch</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+        <tr><td class="field">daylight_hours</td><td class="desc">Tageslichtstunden der Woche (Score nur bei Tag)</td><td class="vals">Stunden</td><td><span class="chip src-clim">Klima-Batch</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+        <tr><td class="field">wave_source / wave_window / wave_note</td><td class="desc">Wellen-Ehrlichkeit: Welle hat kürzere Historie (~ab 2022)</td><td class="vals">Text-Marker</td><td><span class="chip src-clim">Klima-Batch</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- F -->
+  <section>
+    <div class="sec-head"><h2>Beste Zeit &amp; Windmonate <span class="tag">abgeleitet aus Klimatologie</span></h2></div>
+    <p class="sec-note">Was der Nutzer eigentlich fragt: „Wann ist es hier gut?" — errechnet aus der Klimatologie oben über das Score-Regelwerk der jeweiligen Sportart.</p>
+    <div class="tscroll"><table>
+      <thead><tr><th>Größe</th><th>Beschreibung</th><th>Werte / Typ</th><th>Quelle</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="field">pct_usable[52]</td><td class="desc">Saison-Kurve: Anteil nutzbarer Tag-Stunden je KW</td><td class="vals">0–1 pro Woche</td><td><span class="chip src-auto">Automatisch</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+        <tr><td class="field">good_weeks</td><td class="desc">Wochen über der „gut"-Schwelle</td><td class="vals">Wochenliste (1–52)</td><td><span class="chip src-auto">Automatisch</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+        <tr><td class="field">beste Monate / Wochen</td><td class="desc">Top-Reisezeit des Spots (Ranking)</td><td class="vals">nach Coverage &amp; Intensität</td><td><span class="chip src-auto">Automatisch</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+        <tr><td class="field">Region-Saison</td><td class="desc">Aggregat über alle Spots der Region</td><td class="vals">52-Wochen-Kurve</td><td><span class="chip src-auto">Automatisch</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- G -->
+  <section>
+    <div class="sec-head"><h2>Live &amp; Vorhersage <span class="tag">Laufzeit — nicht gespeichert</span></h2></div>
+    <p class="sec-note">Zur Laufzeit aus Open-Meteo geladen und kurz gecacht — kein DB-Feld am Spot, aber Teil dessen, was ein Spot „mitbringt".</p>
+    <div class="tscroll"><table>
+      <thead><tr><th>Größe</th><th>Beschreibung</th><th>Werte / Typ</th><th>Quelle</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="field">current</td><td class="desc">Aktuelle Bedingungen</td><td class="vals">Wind · Böe · Richtung · Luft · Wasser · Welle · Periode · Wellenrichtung</td><td><span class="chip src-live">Live</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+        <tr><td class="field">forecast (7 Tage)</td><td class="desc">Tages-Zusammenfassung + stündlich</td><td class="vals">Wind/Böe/Welle je Stunde</td><td><span class="chip src-live">Live</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+        <tr><td class="field">consensus / confidence</td><td class="desc">Streuung mehrerer Modelle + Verlässlichkeitsstufe</td><td class="vals">Band + Stufe</td><td><span class="chip src-live">Live</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+        <tr><td class="field">model_pref</td><td class="desc">Bevorzugtes Wettermodell des Spots/Region</td><td class="vals">z. B. ICON · GFS · ECMWF</td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-opt">Optional</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- H -->
+  <section>
+    <div class="sec-head"><h2>Bewertung <span class="tag">abgeleitet</span></h2></div>
+    <p class="sec-note">Aus Klimatologie/Live + Regelwerk berechnet — nie am Spot gespeichert, immer frisch.</p>
+    <div class="tscroll"><table>
+      <thead><tr><th>Größe</th><th>Beschreibung</th><th>Werte / Typ</th><th>Quelle</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="field">Now-Badge</td><td class="desc">Aktuelle Eignung jetzt</td><td class="vals">gut · mäßig · nein</td><td><span class="chip src-auto">Automatisch</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+        <tr><td class="field">score / rank_score</td><td class="desc">Rang in Suche &amp; Reverse-Suche</td><td class="vals">0–1</td><td><span class="chip src-auto">Automatisch</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+        <tr><td class="field">scoring_params</td><td class="desc">Score-Parameter — global pro Sportart, nicht pro Spot</td><td class="vals">Referenz (versioniert)</td><td><span class="chip src-auto">System</span></td><td><span class="chip req req-opt">global</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- I -->
+  <section>
+    <div class="sec-head"><h2>Ausstattung <span class="tag">facilities</span></h2></div>
+    <p class="sec-note">Vor-Ort-Infrastruktur — je Eintrag „vorhanden" + optionaler Hinweis. Empfohlen, blockt „live" aber nie.</p>
+    <div class="tscroll"><table>
+      <thead><tr><th>Feld</th><th>Beschreibung</th><th>Werte / Typ</th><th>Quelle</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="field">facilities</td><td class="desc">Ausstattung am Spot</td><td class="vals">Parkplatz · Dusche · Gastronomie · Camping · Schule/Verleih</td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-rec">Empfohlen</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- J -->
+  <section>
+    <div class="sec-head"><h2>Medien &amp; Meta</h2></div>
+    <p class="sec-note">Bild und Verwaltungsdaten. Das Hero-Bild ist Pflicht fürs Veröffentlichen — und zwar vollständig kreditiert.</p>
+    <div class="tscroll"><table>
+      <thead><tr><th>Feld</th><th>Beschreibung</th><th>Werte / Typ</th><th>Quelle</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="field">image</td><td class="desc">Hero-Bild mit vollständigem Nachweis</td><td class="vals"><code>url</code> + <code>source</code> + <code>license</code> + <code>credit</code> (alle 4)</td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-must">Pflicht (published)</span></td></tr>
+        <tr><td class="field">overrides</td><td class="desc">Redaktionelle Übersteuerung einzelner Klima-Felder</td><td class="vals">Feld → Wert</td><td><span class="chip src-red">Redaktion</span></td><td><span class="chip req req-opt">Optional</span></td></tr>
+        <tr><td class="field">created_at / updated_at</td><td class="desc">Zeitstempel</td><td class="vals">Datum/Zeit</td><td><span class="chip src-auto">Automatisch</span></td><td><span class="chip req req-auto">abgeleitet</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <footer>
+    Quelle der Struktur: <code>spots</code>-Tabelle, <code>climatology</code>-Record
+    (52 Wochen), Live-/Forecast-Pfad (Open-Meteo) und die Readiness-Regeln
+    (<code>required_fields</code>). Enum-Werte (Level, Wasserbild, Style, Facilities)
+    aus der zentralen Label-Liste. Klima-Daten stammen ausschließlich aus echten
+    Open-Meteo-Abfragen; Wellen-Historie ist kürzer (~ab 2022) und im Record ehrlich markiert.
+  </footer>
+</div>
+
+<script>
+  // Respect the viewer's theme toggle over the OS media query.
+  (function () {
+    try {
+      var stored = localStorage.getItem("theme");
+      if (stored === "dark" || stored === "light") {
+        document.documentElement.setAttribute("data-theme", stored);
+      }
+    } catch (e) {}
+  })();
+</script>
