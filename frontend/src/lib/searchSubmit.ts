@@ -26,6 +26,7 @@ export interface SearchValue {
   whereSel: WhereSelection | null;
   when: WhenValue;
   which: string[]; // backend sport values: surf | kitesurf | windsurf | wing
+  disciplines: string[]; // freestyle | big_air | foil
 }
 
 export const EMPTY_SEARCH: SearchValue = {
@@ -33,6 +34,7 @@ export const EMPTY_SEARCH: SearchValue = {
   whereSel: null,
   when: null,
   which: [],
+  disciplines: [],
 };
 
 /** ISO-8601 week number (1..53) for a date. */
@@ -73,6 +75,7 @@ export function buildSearchParams(v: SearchValue): URLSearchParams {
 
   // Richer inputs, forwarded for future backend support (currently unread):
   if (v.which.length > 1) p.set("sports", v.which.join(",")); // TODO backend
+  if (v.disciplines.length) p.set("disciplines", v.disciplines.join(",")); // TODO backend
   if (v.when?.mode === "range") {
     p.set("from", v.when.from); // TODO backend
     if (v.when.to) p.set("to", v.when.to); // TODO backend

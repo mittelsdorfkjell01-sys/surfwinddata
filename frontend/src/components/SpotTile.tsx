@@ -30,7 +30,7 @@ export default function SpotTile({ spot }: { spot: Spot }) {
   return (
     <Link
       to={`/spot/${id}`}
-      className="group relative block h-[300px] w-[220px] shrink-0 overflow-hidden rounded-3xl"
+      className="group relative block h-[220px] w-full overflow-hidden rounded-3xl"
     >
       <div className="absolute inset-0">
         <SpotImage
@@ -63,9 +63,9 @@ export default function SpotTile({ spot }: { spot: Spot }) {
           </div>
         </div>
         {tags.length > 0 && (
-          <p className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10px] text-white/75">
+          <p className="mt-1.5 flex flex-nowrap gap-x-2 overflow-hidden text-[9px] text-white/75">
             {tags.map((t) => (
-              <span key={t}>{t}</span>
+              <span key={t} className="whitespace-nowrap">{t}</span>
             ))}
           </p>
         )}
