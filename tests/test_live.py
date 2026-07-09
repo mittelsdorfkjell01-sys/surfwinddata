@@ -154,10 +154,10 @@ def test_live_conditions_expose_consensus_band():
     )
     assert len(out["models"]) >= 3            # several models fetched in one request
     cur = out["current"]
-    assert cur["wind"] == 14.0                # consensus median
-    band = cur["wind_spread"]
-    assert band["n"] == len(out["models"])
-    assert band["low"] < band["median"] < band["high"]
+    assert cur["wind"] == 14.0                # instantaneous current (unsuffixed)
+    band = cur["wind_spread"]                 # "now" spread from the current hour
+    assert band["n"] == len(out["models"])    # all models present in the band
+    assert band["low"] <= band["median"] <= band["high"]
 
 
 def test_forecast_confidence_is_spread_driven():

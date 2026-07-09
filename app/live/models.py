@@ -22,6 +22,19 @@ BEST_MATCH = "best_match"             # Open-Meteo global blend
 # blend, not an independent member.
 CONSENSUS_GLOBAL_MODELS = ["icon_seamless", "gfs_seamless", "ecmwf_ifs025"]
 
+# Legacy / invalid ``model_pref`` values → the valid Open-Meteo id. Open-Meteo
+# has no bare ``icon`` model (it 400s the whole request); ``icon_seamless`` is
+# the ICON family's seamless product and auto-selects the best ICON domain
+# (D2/EU/global) for the coordinate, so it is the right home model everywhere.
+_MODEL_ALIASES = {"icon": "icon_seamless"}
+
+
+def normalize_model(model: str | None) -> str | None:
+    """Map a stored/legacy model id onto a currently-valid Open-Meteo id."""
+    if not model:
+        return model
+    return _MODEL_ALIASES.get(model, model)
+
 
 def _in_box(lat: float, lon: float, s: float, n: float, w: float, e: float) -> bool:
     return s <= lat <= n and w <= lon <= e
@@ -30,12 +43,12 @@ def _in_box(lat: float, lon: float, s: float, n: float, w: float, e: float) -> b
 def select_model(lat: float, lon: float, pref: str | None = None) -> str:
     """Choose the preferred regional model for a coordinate.
 
-    If ``pref`` is given (e.g. ``spots.model_pref``) it is returned unchanged.
-    Otherwise the most specific covering regional model wins, falling back to
-    ``best_match``.
+    If ``pref`` is given (e.g. ``spots.model_pref``) it wins, normalized onto a
+    valid Open-Meteo id. Otherwise the most specific covering regional model
+    wins, falling back to ``best_match``.
     """
     if pref:
-        return pref
+        return normalize_model(pref)
 
     # Meteo-France AROME — France and its immediate coastlines (checked first as
     # the highest-resolution option).

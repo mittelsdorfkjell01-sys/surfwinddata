@@ -130,6 +130,21 @@ def _column(block: dict, var: str, mid: str, multi: bool) -> list:
     return v if isinstance(v, list) else []
 
 
+def _hour_index(times: list, now_iso: str | None) -> int:
+    """Index of the current hour on an hourly time axis (else the first hour)."""
+    if now_iso and times:
+        hour = now_iso[:13]  # 'YYYY-MM-DDTHH'
+        for i, t in enumerate(times):
+            if isinstance(t, str) and t[:13] == hour:
+                return i
+    return 0
+
+
+def _hour_at(block: dict, var: str, mid: str, multi: bool, idx: int):
+    col = _column(block, var, mid, multi)
+    return col[idx] if 0 <= idx < len(col) else None
+
+
 # --- public service entry points -------------------------------------------
 
 def get_live_conditions(
@@ -152,7 +167,6 @@ def get_live_conditions(
     lat, lon = _spot_coords(spot)
     primary_model, models = _model_set(lat, lon, spot.model_pref)
     multi = len(models) > 1
-    src = models[0] if models else primary_model  # dir/air source
 
     fc = _cached_forecast(
         lat, lon, primary_model, ",".join(models), client=client, cache=cache
@@ -161,8 +175,14 @@ def get_live_conditions(
     cur_f = fc.get("current") or {}
     cur_m = mar.get("current") or {}
 
-    wind_band = spread([_field(cur_f, "wind_speed_10m", m, multi) for m in models])
-    gust_band = spread([_field(cur_f, "wind_gusts_10m", m, multi) for m in models])
+    # Open-Meteo returns the `current` block UNSUFFIXED even for multi-model
+    # requests (only `hourly` carries per-model suffixes), so read the
+    # instantaneous values directly. The consensus spread band is taken from the
+    # current hour of the multi-model hourly series.
+    hourly = fc.get("hourly") or {}
+    idx = _hour_index(hourly.get("time") or [], cur_f.get("time"))
+    wind_band = spread([_hour_at(hourly, "wind_speed_10m", m, multi, idx) for m in models])
+    gust_band = spread([_hour_at(hourly, "wind_gusts_10m", m, multi, idx) for m in models])
 
     return {
         "spot_id": spot.id,
@@ -170,10 +190,10 @@ def get_live_conditions(
         "models": models,
         "time": cur_f.get("time"),
         "current": {
-            "wind": wind_band["median"] if wind_band else None,
-            "gust": gust_band["median"] if gust_band else None,
-            "dir": _field(cur_f, "wind_direction_10m", src, multi),
-            "air": _field(cur_f, "temperature_2m", src, multi),
+            "wind": cur_f.get("wind_speed_10m"),
+            "gust": cur_f.get("wind_gusts_10m"),
+            "dir": cur_f.get("wind_direction_10m"),
+            "air": cur_f.get("temperature_2m"),
             "sst": cur_m.get("sea_surface_temperature"),
             "swell": cur_m.get("swell_wave_height"),
             "period": cur_m.get("swell_wave_period"),

@@ -82,17 +82,12 @@ def make_forecast_response(
         return round(step * (mi - (k - 1) / 2), 2)
 
     hourly: dict = {"time": times}
-    current: dict = {"time": times[0]}
     for mi, m in enumerate(models):
         if m in null_set:
             hourly[f"wind_speed_10m_{m}"] = [None] * n
             hourly[f"wind_gusts_10m_{m}"] = [None] * n
             hourly[f"wind_direction_10m_{m}"] = [None] * n
             hourly[f"temperature_2m_{m}"] = [None] * n
-            current[f"wind_speed_10m_{m}"] = None
-            current[f"wind_gusts_10m_{m}"] = None
-            current[f"wind_direction_10m_{m}"] = None
-            current[f"temperature_2m_{m}"] = None
             continue
         hourly[f"wind_speed_10m_{m}"] = [
             round(base_wind[i] + offset(mi, SPREAD_PER_DAY_KT * (i // 24)), 2)
@@ -104,13 +99,18 @@ def make_forecast_response(
         ]
         hourly[f"wind_direction_10m_{m}"] = base_dir
         hourly[f"temperature_2m_{m}"] = base_air
-        # Current: a small fixed 4 kt band so the median stays 14/19 but the live
-        # tile still shows a spread.
-        current[f"wind_speed_10m_{m}"] = round(14.0 + offset(mi, 4.0), 2)
-        current[f"wind_gusts_10m_{m}"] = round(19.0 + offset(mi, 4.0), 2)
-        current[f"wind_direction_10m_{m}"] = 270.0
-        current[f"temperature_2m_{m}"] = 22.0
 
+    # Open-Meteo returns the `current` block UNSUFFIXED even for a multi-model
+    # request (only `hourly` carries per-model suffixes) -- mirror that here so
+    # the fake matches reality. The service reads current unsuffixed and derives
+    # the "now" spread from the current hour of the hourly series.
+    current = {
+        "time": times[0],
+        "wind_speed_10m": 14.0,
+        "wind_gusts_10m": 19.0,
+        "wind_direction_10m": 270.0,
+        "temperature_2m": 22.0,
+    }
     return {"latitude": 36.0, "longitude": -5.6, "current": current, "hourly": hourly}
 
 
