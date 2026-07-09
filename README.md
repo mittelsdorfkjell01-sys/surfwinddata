@@ -251,6 +251,35 @@ python -m app.era5.cli build tarifa-los-lances
 python -m app.era5.cli recompute tarifa-los-lances --dump
 ```
 
+### Bulk: all spots at once (`app.era5.batch`)
+
+The per-spot commands above are fine for one spot; to populate the whole
+catalogue use the **batch orchestrator**, which chains `request → poll → build`
+over a selection of spots. It only *orchestrates* the tested per-spot functions —
+it never re-implements the derivation and never touches `spots.overrides`.
+
+```bash
+python -m app.era5.batch                       # all spots, skip those already done
+python -m app.era5.batch --status published     # only the live catalogue
+python -m app.era5.batch --region sardinia      # one region (repeatable)
+python -m app.era5.batch --slug tarifa-los-lances --force   # recompute one
+python -m app.era5.batch --dry-run              # list compute/skip, no network
+# equivalently: python -m app.era5.cli batch ...
+```
+
+- **Idempotent** — spots that already carry climatology are skipped; `--force`
+  recomputes and, when a cached raw Parquet exists, does so **without any network
+  fetch** (`recompute_climatology`).
+- **Net-resilient** — retries with backoff on transient HTTP errors (429/5xx/
+  timeouts, `--retries`), a `--sleep` pause between spots, and per-spot isolation:
+  one failing spot is logged and marked `failed`, the batch continues.
+- **Reportable** — one `ok`/`skip`/`fail` line per spot plus a summary; the process
+  exits non-zero if any spot failed (for automation). Wave-history markers
+  (`wave_source`/`wave_window`/`wave_note`) are carried through unchanged.
+- **Needs outbound access** to `archive-api.open-meteo.com` (wind/temp) and
+  `marine-api.open-meteo.com` (waves). Run it where those are reachable (e.g. the
+  VPS). Verify the result with `python -m scripts.verify_content`.
+
 ### Where the raw data lives
 
 Downloaded extracts are written as Parquet under `ERA5_RAW_DIR`
@@ -728,6 +757,16 @@ variable). Nowhere else is it hardcoded (the sole fallback is
 - **Vercel:** set `VITE_API_URL` in the project's Environment Variables to the
   deployed backend URL (e.g. `https://api.example.com`). Rebuild after changing it.
 - The backend must allow the frontend origin via `CORS_ORIGINS` (Sprint 9).
+
+> **Symptom → cause.** An **empty landing "aktuelle Top Spots" row and a dead
+> search** on the deployed site is almost always a wiring problem, *not* missing
+> data: `VITE_API_URL` is unset (so the build fell back to `http://localhost:8000`
+> and every fetch fails), the backend is down/unreachable, or `CORS_ORIGINS` does
+> not list the frontend origin. Check, in order: `GET <backend>/health` →
+> `GET <backend>/spots?status=published` returns > 0 → the browser Network tab
+> shows requests going to the **deployed** backend (not localhost) with no CORS
+> error. Only once those pass is it a content problem (see the climatology batch
+> below for empty season/best-spots panels).
 
 ### Local dev — both services at once
 ```bash
