@@ -64,9 +64,10 @@ export default function SearchWhen({
   const selMonth = flex?.month ?? null;
   const selDuration = flex?.duration ?? null;
 
-  // A choice on one side locks the other until reset.
-  const calDisabled = value?.mode === "flex";
-  const flexDisabled = value?.mode === "range";
+  // A choice on one side locks the other until reset; "egal wann" locks both.
+  const isOpen = value?.mode === "open";
+  const calDisabled = value?.mode === "flex" || isOpen;
+  const flexDisabled = value?.mode === "range" || isOpen;
 
   const clickDay = (d: Date) => {
     const iso = toISO(d);
@@ -115,7 +116,21 @@ export default function SearchWhen({
   const months = [anchor, addMonth(anchor, 1)];
 
   return (
-    <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
+    <div className="flex flex-col gap-4">
+      {/* Open time axis — "unentschlossen" → ranks the best weeks for the place. */}
+      <button
+        type="button"
+        onClick={() => onChange(isOpen ? null : { mode: "open" })}
+        className={`self-start rounded-full border px-3 py-1 text-[12px] font-medium transition-colors ${
+          isOpen
+            ? "border-brand-orange bg-brand-orange/10 text-brand-orange"
+            : "border-brand-teal/50 text-brand-teal hover:bg-brand-teal/5"
+        }`}
+      >
+        unentschlossen
+      </button>
+
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
       <div
         aria-disabled={calDisabled}
         className={`flex flex-1 gap-8 transition-opacity ${
@@ -238,6 +253,7 @@ export default function SearchWhen({
         >
           Zurücksetzen
         </button>
+      </div>
       </div>
     </div>
   );

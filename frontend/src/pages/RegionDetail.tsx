@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import L from "leaflet";
-import Header from "../components/Header";
+import LandingHeader from "../components/LandingHeader";
 import SpotCard from "../components/SpotCard";
 import MapSpotCard from "../components/MapSpotCard";
 import RegionSeason from "../components/RegionSeason";
@@ -77,9 +77,9 @@ export default function RegionDetail() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white">
-        <Header />
-        <div className="mx-auto max-w-[1400px] px-4 pt-24 sm:px-8">
+      <div className="relative min-h-screen bg-white">
+        <LandingHeader />
+        <div className="mx-auto max-w-[1400px] px-4 pt-32 sm:px-8">
           <div className="mb-10 h-8 w-64 animate-pulse rounded bg-line" />
           <SpotGridSkeleton />
         </div>
@@ -89,9 +89,9 @@ export default function RegionDetail() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-white">
-        <Header />
-        <div className="mx-auto max-w-[1400px] px-4 pt-24 sm:px-8">
+      <div className="relative min-h-screen bg-white">
+        <LandingHeader />
+        <div className="mx-auto max-w-[1400px] px-4 pt-32 sm:px-8">
           <ErrorBanner message={error} />
         </div>
       </div>
@@ -100,12 +100,12 @@ export default function RegionDetail() {
 
   if (!region || !backendRegion) {
     return (
-      <div className="min-h-screen bg-white">
-        <Header />
+      <div className="relative min-h-screen bg-white">
+        <LandingHeader />
         <div className="grid min-h-screen place-items-center px-6 text-center">
           <div>
             <h1 className="text-2xl font-semibold text-navy">Region nicht gefunden</h1>
-            <Link to="/" className="mt-4 inline-block text-[15px] text-navy underline">
+            <Link to="/" className="mt-4 inline-block text-[15px] text-brand-teal underline">
               Zurück zur Übersicht
             </Link>
           </div>
@@ -124,8 +124,8 @@ export default function RegionDetail() {
   const gridSpots = sortSpots(filterSpots(region.spots, filters), filters.sort);
 
   return (
-    <div className="min-h-screen bg-white">
-      <Header />
+    <div className="relative min-h-screen bg-white">
+      <LandingHeader />
 
       {/* Hero */}
       <section className="relative">
@@ -158,7 +158,7 @@ export default function RegionDetail() {
           {region.country && <span className="mx-1.5 text-muted">›</span>}
           {region.country && <span>{region.country}</span>}
           <span className="mx-1.5 text-muted">›</span>
-          <span className="text-navy">{region.name}</span>
+          <span className="text-brand-teal">{region.name}</span>
         </nav>
 
         {/* Über die Region + beste Monate (daneben) */}
@@ -181,7 +181,7 @@ export default function RegionDetail() {
                   {bestWeeks.map((w) => (
                     <span
                       key={w.week}
-                      className="inline-flex items-center rounded-full bg-navy/10 px-2.5 py-1 text-[12px] font-medium text-navy"
+                      className="inline-flex items-center rounded-full bg-brand-teal/10 px-2.5 py-1 text-[12px] font-medium text-brand-teal"
                       title={`Score ${Math.round((w.score ?? 0) * 100)} · ${w.spots_working ?? 0} Spots`}
                     >
                       KW {w.week}
@@ -194,7 +194,7 @@ export default function RegionDetail() {
           {seasonView ? (
             <RegionSeason season={seasonView.season} bestMonths={seasonView.bestMonths} />
           ) : (
-            <div className="rounded-2xl bg-[#F1F5FA] px-5 py-10 text-center text-[13px] text-muted">
+            <div className="rounded-3xl bg-cream px-5 py-10 text-center text-[13px] text-muted">
               Noch keine Saison-Daten für diese Region (Klimatologie fehlt).
             </div>
           )}
@@ -223,7 +223,7 @@ export default function RegionDetail() {
         {withCoords.length > 0 && (
           <div className="mt-14">
             <h2 className="mb-5 text-[15px] font-semibold text-navy">Spots auf der Karte</h2>
-            <div className="overflow-hidden rounded-2xl shadow-card">
+            <div className="overflow-hidden rounded-3xl shadow-card">
               <MapContainer
                 center={region.center}
                 zoom={7}

@@ -47,6 +47,7 @@ export function adaptSpot(
     // an external placeholder). A real upload fills this in later.
     image: resolveMediaUrl(s.image?.url) ?? "",
     hero: resolveMediaUrl(s.image?.url),
+    heroFocal: s.image?.focal ?? null,
     coords,
     windDir: s.facing ?? undefined,
     sports: s.sports,
@@ -55,6 +56,15 @@ export function adaptSpot(
     style: s.style,
     facilities: s.facilities,
     climatology: (s as SpotRead).climatology ?? null,
+    mapView:
+      editorial?.map_view &&
+      Array.isArray(editorial.map_view.center) &&
+      typeof editorial.map_view.zoom === "number"
+        ? {
+            center: editorial.map_view.center as [number, number],
+            zoom: editorial.map_view.zoom as number,
+          }
+        : null,
   };
 }
 

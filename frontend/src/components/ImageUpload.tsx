@@ -6,16 +6,18 @@ import { useRef, useState } from "react";
 export const HERO_REQ = {
   minWidth: 3840,
   minHeight: 2000,
-  formats: ["image/jpeg", "image/png"],
-  formatLabel: "JPG oder PNG",
-  maxBytes: 12 * 1024 * 1024, // 12 MB
+  formats: ["image/jpeg", "image/png", "image/webp"],
+  formatLabel: "JPG, PNG oder WebP",
+  // Generous original: the server downscales + re-encodes to AVIF/WebP on upload.
+  maxBytes: 40 * 1024 * 1024, // 40 MB
 };
 
 type Result =
   | { ok: true; width: number; height: number }
   | { ok: false; reason: string; width?: number; height?: number };
 
-function validate(file: File): Promise<Result> {
+/** Client-side hero gate, reused by the public community upload (Sprint D). */
+export function validateHeroFile(file: File): Promise<Result> {
   return new Promise((resolve) => {
     if (!HERO_REQ.formats.includes(file.type)) {
       return resolve({ ok: false, reason: `Format muss ${HERO_REQ.formatLabel} sein.` });
@@ -61,7 +63,7 @@ export default function ImageUpload({ onAccept }: { onAccept?: (file: File) => v
     setFileName(null);
     if (!file) return;
 
-    const res = await validate(file);
+    const res = await validateHeroFile(file);
     setResult(res);
     setFileName(file.name);
     if (res.ok) {
@@ -91,7 +93,7 @@ export default function ImageUpload({ onAccept }: { onAccept?: (file: File) => v
         <input
           ref={inputRef}
           type="file"
-          accept="image/jpeg,image/png"
+          accept="image/jpeg,image/png,image/webp"
           className="hidden"
           onChange={(e) => handleFile(e.target.files?.[0])}
         />

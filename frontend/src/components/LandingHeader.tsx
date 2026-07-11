@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { MenuIcon, UserIcon } from "../lib/icons";
+import { MapIcon, MenuIcon, UserIcon } from "../lib/icons";
 
 /**
  * Landing-only top bar for the "surfwind data" design (Frame_1 / Frame_5).
@@ -25,6 +25,10 @@ export default function LandingHeader() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
+  const location = useLocation();
+  // Remember where the map is opened from, so the map's close button can return
+  // here instead of always landing on "/".
+  const from = location.pathname + location.search;
 
   // Close on outside-click and Escape while the menu is open.
   useEffect(() => {
@@ -58,8 +62,18 @@ export default function LandingHeader() {
             </span>
           </Link>
 
-          {/* Right — add-spot link + account pill */}
-          <div className="col-start-3 flex items-center justify-end gap-4 sm:gap-5">
+          {/* Right — map button + add-spot link + account pill */}
+          <div className="col-start-3 flex items-center justify-end gap-3 sm:gap-5">
+            <Link
+              to="/map"
+              state={{ from }}
+              aria-label="Karte öffnen"
+              className="inline-flex items-center gap-2 rounded-2xl bg-white px-3.5 py-2 text-[15px] font-medium text-brand-teal shadow-pill transition-colors hover:bg-cream"
+            >
+              <MapIcon className="text-[18px]" />
+              <span className="hidden sm:inline">Karte</span>
+            </Link>
+
             <Link
               to="/admin/spot/new"
               className="hidden text-[16px] font-medium text-brand-teal transition-colors hover:text-brand-teal-dark sm:block"

@@ -1,0 +1,418 @@
+// Edit a region like a spot: description, hero image (manual URL or upload),
+// Windmonate (season JSON, auto-generated but correctable), model default, and
+// which spots belong to it (reassign in/out — fixes wrong auto-assignment).
+
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  ApiError,
+  assignSpotRegion,
+  getAdminSpots,
+  getRegion,
+  getRegions,
+  resolveMediaUrl,
+  setRegionImageFocal,
+  setRegionImageManual,
+  updateRegion,
+  uploadRegionImage,
+  type Region,
+  type SpotSummary,
+} from "../lib/api";
+import { validateHeroFile } from "../components/ImageUpload";
+import ImageFocalEditor from "../components/ImageFocalEditor";
+
+const input =
+  "w-full rounded-xl border border-navy/15 bg-white px-3 py-2 text-[14px] text-navy outline-none focus:border-navy/40";
+const label = "text-[13px] font-medium text-navy";
+const MONTHS_SHORT = [
+  "Jan", "Feb", "Mär", "Apr", "Mai", "Jun",
+  "Jul", "Aug", "Sep", "Okt", "Nov", "Dez",
+];
+
+export default function AdminRegionForm() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  const [region, setRegion] = useState<Region | null>(null);
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [spots, setSpots] = useState<SpotSummary[]>([]);
+  const [allSpots, setAllSpots] = useState<SpotSummary[]>([]);
+
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [bestMonths, setBestMonths] = useState<number[]>([]);
+  const [imgUrl, setImgUrl] = useState("");
+  const [imgCredit, setImgCredit] = useState("");
+
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [spotSearch, setSpotSearch] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+
+  const flash = (m: string) => {
+    setNotice(m);
+    setTimeout(() => setNotice(null), 2500);
+  };
+
+  const loadRegion = async () => {
+    if (!id) return;
+    const r = await getRegion(id);
+    setRegion(r);
+    setName(r.name);
+    setDescription(r.description ?? "");
+    setBestMonths(
+      Array.isArray(r.season?.best_months) ? (r.season!.best_months as number[]) : []
+    );
+  };
+
+  const loadSpots = async () => {
+    if (!id) return;
+    const [mine, all] = await Promise.all([
+      getAdminSpots({ region_id: id, limit: 500 }),
+      getAdminSpots({ limit: 500 }),
+    ]);
+    setSpots(mine.items);
+    setAllSpots(all.items);
+  };
+
+  useEffect(() => {
+    getRegions().then(setRegions).catch(() => {});
+    loadRegion().catch((e) =>
+      setError(e instanceof ApiError ? e.message : "Laden fehlgeschlagen.")
+    );
+    loadSpots().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const otherSpots = useMemo(
+    () => allSpots.filter((s) => s.region_id !== id),
+    [allSpots, id]
+  );
+  const regionName = (rid: string) =>
+    regions.find((r) => r.id === rid)?.name ?? "—";
+
+  const saveFields = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!id) return;
+    setBusy(true);
+    setError(null);
+    // Preserve any other season keys; only the best-months selection is edited.
+    const season = {
+      ...(region?.season ?? {}),
+      best_months: [...bestMonths].sort((a, b) => a - b),
+    };
+    try {
+      const updated = await updateRegion(id, {
+        name: name.trim() || undefined,
+        description: description.trim() ? description.trim() : null,
+        season,
+      });
+      setRegion(updated);
+      flash("Region gespeichert.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Speichern fehlgeschlagen.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveImageUrl = async () => {
+    if (!id || !imgUrl.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await setRegionImageManual(id, {
+        url: imgUrl.trim(),
+        credit: imgCredit.trim(),
+      });
+      setRegion(r);
+      setImgUrl("");
+      flash("Titelbild gesetzt.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Bild setzen fehlgeschlagen.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const uploadImage = async (file: File | null) => {
+    if (!id || !file) return;
+    if (!imgCredit.trim()) {
+      setError("Für den Upload bitte einen Credit angeben.");
+      return;
+    }
+    const res = await validateHeroFile(file);
+    if (!res.ok) {
+      setError(res.reason ?? "Bild erfüllt die Vorgaben nicht.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await uploadRegionImage(id, file, imgCredit.trim());
+      setRegion(r);
+      flash("Titelbild hochgeladen.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Upload fehlgeschlagen.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reassign = async (spotId: string, regionId: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await assignSpotRegion(spotId, regionId);
+      await loadSpots();
+      flash("Spot verschoben.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Verschieben fehlgeschlagen.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!region) {
+    return <div className="mx-auto max-w-[820px] text-[14px] text-muted">Lädt…</div>;
+  }
+
+  return (
+    <div className="mx-auto max-w-[820px]">
+      <button
+        type="button"
+        onClick={() => navigate("/admin/regions")}
+        className="text-[13px] text-muted hover:text-navy"
+      >
+        ← Regionen
+      </button>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-[24px] font-semibold text-navy">
+          Region bearbeiten — {region.name}
+        </h1>
+        <a
+          href={`/region/${region.slug}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-lg border border-line px-3 py-1.5 text-[13px] font-medium text-navy hover:bg-navy/5"
+        >
+          Vorschau ansehen ↗
+        </a>
+      </div>
+
+      {notice && (
+        <div className="mt-4 rounded-xl bg-brand-green/10 px-3 py-2 text-[13px] font-medium text-brand-green">
+          {notice}
+        </div>
+      )}
+      {error && (
+        <div role="alert" className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700">
+          {error}
+        </div>
+      )}
+
+      {/* Editorial */}
+      <form onSubmit={saveFields} className="mt-6 space-y-4">
+        <label className="block">
+          <span className={label}>Name</span>
+          <input className={`mt-1.5 ${input}`} value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className={label}>Beschreibung</span>
+          <textarea
+            className={`mt-1.5 ${input} min-h-[120px] resize-y`}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Beschreibung der Region…"
+          />
+        </label>
+        <div className="block">
+          <span className={label}>Beste Monate (Windmonate)</span>
+          <span className="ml-2 text-[12px] text-muted">
+            Monate anklicken, in denen die Region am besten läuft
+          </span>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {MONTHS_SHORT.map((m, i) => {
+              const month = i + 1;
+              const on = bestMonths.includes(month);
+              return (
+                <button
+                  key={month}
+                  type="button"
+                  onClick={() =>
+                    setBestMonths((prev) =>
+                      prev.includes(month)
+                        ? prev.filter((x) => x !== month)
+                        : [...prev, month]
+                    )
+                  }
+                  className={`rounded-lg px-3 py-1.5 text-[13px] font-medium ${
+                    on
+                      ? "bg-navy text-white"
+                      : "border border-navy/15 bg-white text-navy hover:bg-navy/5"
+                  }`}
+                >
+                  {m}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {error && (
+          <div role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700">
+            {error}
+          </div>
+        )}
+        <button type="submit" disabled={busy} className="rounded-xl bg-navy px-4 py-2 text-[14px] font-medium text-white hover:bg-navy-dark disabled:opacity-50">
+          Speichern
+        </button>
+      </form>
+
+      {/* Hero image */}
+      <section className="mt-10">
+        <h2 className="text-[16px] font-semibold text-navy">Titelbild</h2>
+        <div className="mt-3 flex flex-wrap items-start gap-4">
+          {region.image?.url ? (
+            <img
+              src={resolveMediaUrl(region.image.url)}
+              alt=""
+              className="h-24 w-40 rounded-xl object-cover"
+            />
+          ) : (
+            <div className="grid h-24 w-40 place-items-center rounded-xl bg-cream text-[12px] text-muted">
+              Kein Bild
+            </div>
+          )}
+          <div className="min-w-[240px] flex-1 space-y-2">
+            <input
+              className={input}
+              value={imgCredit}
+              onChange={(e) => setImgCredit(e.target.value)}
+              placeholder="Credit / Urheber (für Upload Pflicht)"
+            />
+            <div className="flex gap-2">
+              <input
+                className={input}
+                value={imgUrl}
+                onChange={(e) => setImgUrl(e.target.value)}
+                placeholder="Bild-URL setzen"
+              />
+              <button
+                type="button"
+                disabled={busy || !imgUrl.trim()}
+                onClick={saveImageUrl}
+                className="shrink-0 rounded-xl border border-line px-3 py-2 text-[13px] font-medium text-navy hover:bg-navy/5 disabled:opacity-50"
+              >
+                Setzen
+              </button>
+            </div>
+            <div>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(e) => uploadImage(e.target.files?.[0] ?? null)}
+                className="text-[13px] text-navy"
+              />
+              <p className="mt-1 text-[12px] text-muted">
+                Upload: min. 3840×2000 px, Querformat, JPG/PNG.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Focal-point / crop editor */}
+        {region.image?.url && (
+          <div className="mt-4 max-w-[560px]">
+            <p className={label}>Ausschnitt wählen</p>
+            <div className="mt-1.5">
+              <ImageFocalEditor
+                url={region.image.url}
+                focal={region.image.focal}
+                onSave={async (x, y) => {
+                  if (!id) return;
+                  const r = await setRegionImageFocal(id, x, y);
+                  setRegion(r);
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Spots — drag from the right pool into this region */}
+      <section className="mt-10">
+        <h2 className="text-[16px] font-semibold text-navy">Spots zuordnen</h2>
+        <p className="mt-1 text-[13px] text-muted">
+          Ziehe einen Spot aus „Andere Spots" (rechts) in „Diese Region" (links).
+          Er wechselt automatisch die Region — so korrigierst du falsche Zuordnungen.
+        </p>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {/* Left: spots in this region (drop zone) */}
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const sid = e.dataTransfer.getData("text/plain");
+              if (sid && id) void reassign(sid, id);
+            }}
+            className={`rounded-2xl border p-3 ${
+              dragOver ? "border-navy bg-navy/5" : "border-line bg-white"
+            }`}
+          >
+            <p className="px-1 text-[13px] font-semibold text-navy">
+              Diese Region ({spots.length})
+            </p>
+            <div className="mt-2 space-y-2">
+              {spots.length === 0 ? (
+                <p className="px-1 py-6 text-center text-[13px] text-muted">
+                  Spot hierher ziehen …
+                </p>
+              ) : (
+                spots.map((s) => (
+                  <div key={s.id} className="rounded-xl bg-cream px-3 py-2 text-[14px] text-navy">
+                    {s.name}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Right: pool of all other spots (searchable, draggable) */}
+          <div className="rounded-2xl border border-line bg-white p-3">
+            <p className="px-1 text-[13px] font-semibold text-navy">Andere Spots</p>
+            <input
+              value={spotSearch}
+              onChange={(e) => setSpotSearch(e.target.value)}
+              placeholder="Suchen …"
+              className="mt-2 w-full rounded-xl border border-navy/15 bg-white px-3 py-2 text-[14px] text-navy outline-none focus:border-navy/40"
+            />
+            <div className="mt-2 max-h-[360px] space-y-2 overflow-auto">
+              {otherSpots
+                .filter((s) =>
+                  s.name.toLowerCase().includes(spotSearch.trim().toLowerCase())
+                )
+                .map((s) => (
+                  <div
+                    key={s.id}
+                    draggable
+                    onDragStart={(e) => e.dataTransfer.setData("text/plain", s.id)}
+                    className="cursor-grab rounded-xl border border-line px-3 py-2 active:cursor-grabbing"
+                  >
+                    <div className="text-[14px] text-navy">{s.name}</div>
+                    <div className="text-[12px] text-muted">{regionName(s.region_id)}</div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}

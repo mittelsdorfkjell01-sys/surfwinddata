@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.admin.audit import record_audit
 from app.admin.constants import (
+    STATUS_ARCHIVED,
     STATUS_DRAFT,
     STATUS_LIVE,
     validate_facilities,
@@ -245,6 +246,44 @@ def set_spot_live(spot_id, *, db: Session, actor: str | None = "admin") -> dict:
     db.commit()
     db.refresh(spot)
     return {"spot_id": str(spot.id), "status": spot.status, "ready": True}
+
+
+def set_image_focal(
+    spot_id, x: float, y: float, *, db: Session, actor: str | None = "admin"
+) -> Any:
+    """Store the hero image's focal point (object-position %, 0..100) so the crop
+    can be nudged without re-uploading."""
+    spot = _load(db, spot_id)
+    if not (isinstance(spot.image, dict) and spot.image.get("url")):
+        raise ValueError("Kein Bild zum Positionieren.")
+    focal = {"x": max(0.0, min(100.0, float(x))), "y": max(0.0, min(100.0, float(y)))}
+    spot.image = {**spot.image, "focal": focal}
+    record_audit(db, spot.id, "image", {"focal": focal}, actor)
+    db.commit()
+    db.refresh(spot)
+    return spot
+
+
+def set_spot_status(
+    spot_id, status: str, *, db: Session, actor: str | None = "admin"
+) -> dict:
+    """Take a spot offline (``draft``) or archive it (``archived``).
+
+    Going *live* stays in :func:`set_spot_live` (readiness-gated); this covers the
+    reverse moves, which have no gate. ``published`` is rejected here so a spot can
+    never skip the readiness check.
+    """
+    if status not in (STATUS_DRAFT, STATUS_ARCHIVED):
+        raise ValueError(
+            f"invalid target status {status!r}; use 'draft' (offline) or 'archived'"
+        )
+    spot = _load(db, spot_id)
+    spot.status = status
+    action = "unpublish" if status == STATUS_DRAFT else "archive"
+    record_audit(db, spot.id, action, {"status": status}, actor)
+    db.commit()
+    db.refresh(spot)
+    return {"spot_id": str(spot.id), "status": spot.status}
 
 
 def spot_effective_view(spot_id, *, db: Session) -> dict:

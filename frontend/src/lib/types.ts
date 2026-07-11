@@ -21,6 +21,7 @@ export interface Spot {
   tags: Tag[];
   image: string; // "" = no image → branded fallback
   hero?: string;
+  heroFocal?: { x: number; y: number } | null; // object-position % for the crop
   coords?: [number, number]; // [lat, lng]
   windDir?: number; // degrees the wind comes FROM
   waveDir?: number;
@@ -38,6 +39,8 @@ export interface Spot {
   facilities?: FacilityMap | null;
   /** Derived 52-week climatology (from the detail record); null when not derived. */
   climatology?: Record<string, any> | null;
+  /** Admin-set preview frame for the wind/wave flow map (editorial.map_view). */
+  mapView?: { center: [number, number]; zoom: number } | null;
 }
 
 export interface RegionInfo {

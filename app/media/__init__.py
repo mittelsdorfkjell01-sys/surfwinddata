@@ -1,19 +1,49 @@
 """Media storage for uploaded assets (Sprint 3): hero-image validation + disk."""
 
 from app.media.hero import (
+    GALLERY_MAX_BYTES,
+    GALLERY_MIN_HEIGHT,
+    GALLERY_MIN_WIDTH,
+    GALLERY_OUT_MAX_WIDTH,
+    GALLERY_OUT_QUALITY,
     HERO_MAX_BYTES,
     HERO_MIN_HEIGHT,
     HERO_MIN_WIDTH,
+    HERO_OUT_MAX_WIDTH,
+    HERO_OUT_QUALITY,
     HeroImageError,
+    reencode_image,
     save_hero_image,
+    save_region_hero_image,
+    save_spot_image,
+    validate_gallery_image,
     validate_hero_image,
+)
+from app.media.license import (
+    IMAGE_LICENSE_TERMS,
+    IMAGE_LICENSE_VERSION,
+    license_terms,
 )
 
 __all__ = [
     "HERO_MAX_BYTES",
     "HERO_MIN_HEIGHT",
     "HERO_MIN_WIDTH",
+    "HERO_OUT_MAX_WIDTH",
+    "HERO_OUT_QUALITY",
+    "GALLERY_MAX_BYTES",
+    "GALLERY_MIN_HEIGHT",
+    "GALLERY_MIN_WIDTH",
+    "GALLERY_OUT_MAX_WIDTH",
+    "GALLERY_OUT_QUALITY",
     "HeroImageError",
+    "reencode_image",
     "save_hero_image",
+    "save_region_hero_image",
+    "save_spot_image",
+    "validate_gallery_image",
     "validate_hero_image",
+    "IMAGE_LICENSE_TERMS",
+    "IMAGE_LICENSE_VERSION",
+    "license_terms",
 ]

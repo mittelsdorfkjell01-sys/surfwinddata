@@ -23,18 +23,36 @@ def _point(lat: float, lon: float):
     return from_shape(Point(lon, lat), srid=4326)
 
 
+def _bbox_polygon(bbox):
+    """A [min_lon, min_lat, max_lon, max_lat] bbox → a closed rectangle polygon."""
+    from geoalchemy2.shape import from_shape
+    from shapely.geometry import Polygon
+
+    min_lon, min_lat, max_lon, max_lat = bbox
+    ring = [
+        (min_lon, min_lat), (max_lon, min_lat), (max_lon, max_lat),
+        (min_lon, max_lat), (min_lon, min_lat),
+    ]
+    return from_shape(Polygon(ring), srid=4326)
+
+
 def create_region(data: dict, *, db: Session) -> Any:
-    """Create a region with optional centre and defaults template."""
+    """Create a region with optional centre + bounds and defaults template."""
     from app.models import Region
 
     center = None
     if data.get("lat") is not None and data.get("lon") is not None:
         center = _point(float(data["lat"]), float(data["lon"]))
+    bounds = None
+    bbox = data.get("bounds")
+    if bbox and len(bbox) == 4:
+        bounds = _bbox_polygon(bbox)
     region = Region(
         slug=data.get("slug") or _slugify(data["name"]),
         name=data["name"],
         country=data.get("country"),
         center=center,
+        bounds=bounds,
         description=data.get("description"),
         defaults=data.get("defaults") or {},
         season=data.get("season"),
@@ -74,6 +92,65 @@ def update_region_defaults(region_id, defaults: dict, *, db: Session) -> Any:
     merged = dict(region.defaults or {})
     merged.update(defaults or {})
     region.defaults = merged
+    db.commit()
+    db.refresh(region)
+    return region
+
+
+def update_region(region_id, data: dict, *, db: Session) -> Any:
+    """Patch a region's editorial fields. Only keys present in ``data`` are
+    applied; ``defaults`` is merged, ``season``/``name``/``description`` replaced."""
+    from app.models import Region
+
+    region = db.get(Region, region_id)
+    if region is None:
+        raise LookupError(f"unknown region {region_id}")
+    if "name" in data and data["name"]:
+        region.name = data["name"]
+    if "description" in data:
+        region.description = data["description"]
+    if "season" in data:
+        region.season = data["season"]
+    if "defaults" in data and data["defaults"] is not None:
+        merged = dict(region.defaults or {})
+        merged.update(data["defaults"])
+        region.defaults = merged
+    db.commit()
+    db.refresh(region)
+    return region
+
+
+def set_region_image(region_id, image: dict, *, db: Session) -> Any:
+    """Set the region hero image (url required; source/license/credit tracked)."""
+    from app.models import Region
+
+    if not (isinstance(image.get("url"), str) and image["url"].strip()):
+        raise ValueError("Bild-URL ist erforderlich.")
+    region = db.get(Region, region_id)
+    if region is None:
+        raise LookupError(f"unknown region {region_id}")
+    region.image = {
+        "url": image["url"].strip(),
+        "source": (image.get("source") or "manual").strip() or "manual",
+        "license": (image.get("license") or "own").strip() or "own",
+        "credit": (image.get("credit") or "").strip(),
+    }
+    db.commit()
+    db.refresh(region)
+    return region
+
+
+def set_region_image_focal(region_id, x: float, y: float, *, db: Session) -> Any:
+    """Store the region image's focal point (object-position %, 0..100)."""
+    from app.models import Region
+
+    region = db.get(Region, region_id)
+    if region is None:
+        raise LookupError(f"unknown region {region_id}")
+    if not (isinstance(region.image, dict) and region.image.get("url")):
+        raise ValueError("Kein Bild zum Positionieren.")
+    focal = {"x": max(0.0, min(100.0, float(x))), "y": max(0.0, min(100.0, float(y)))}
+    region.image = {**region.image, "focal": focal}
     db.commit()
     db.refresh(region)
     return region

@@ -1,9 +1,13 @@
-"""Hero-image requirements, validation and on-disk storage.
+"""Hero-image requirements, validation, re-encoding and on-disk storage.
 
-The rules here are the **server-side mirror** of the frontend gate in
-``frontend/src/components/ImageUpload.tsx`` (``HERO_REQ``). Keep the two in sync:
-min 3840×2000 px, landscape, JPG/PNG, ≤ 12 MB. The backend re-validates because a
-client gate can always be bypassed.
+Uploads are validated (min dimensions + landscape for hero, max bytes), then
+**re-encoded server-side**: downscaled to a sane max width and converted to AVIF
+(falls back to built-in WebP if the AVIF plugin isn't installed). So a large,
+heavy original is accepted but only a small optimised file is stored/served.
+
+The frontend gate in ``frontend/src/components/ImageUpload.tsx`` (``HERO_REQ``)
+mirrors the *input* rules (min 3840×2000, landscape, ≤ 40 MB); the backend
+re-validates because a client gate can be bypassed.
 """
 
 from __future__ import annotations
@@ -11,16 +15,73 @@ from __future__ import annotations
 import io
 import os
 
-# --- requirements (mirror of frontend HERO_REQ) ----------------------------
+# --- input requirements (mirror of frontend HERO_REQ) ----------------------
 HERO_MIN_WIDTH = 3840
 HERO_MIN_HEIGHT = 2000
-HERO_MAX_BYTES = 12 * 1024 * 1024  # 12 MB
+HERO_MAX_BYTES = 40 * 1024 * 1024  # 40 MB original (re-encoded down on save)
 
-# Accepted content types -> canonical file extension.
+# Community gallery uploads: moderate min size, same generous byte cap.
+GALLERY_MIN_WIDTH = 1280
+GALLERY_MIN_HEIGHT = 720
+GALLERY_MAX_BYTES = 40 * 1024 * 1024  # 40 MB
+
+# --- output re-encoding -----------------------------------------------------
+HERO_OUT_MAX_WIDTH = 3840     # 4K wide is plenty; downscale beyond this
+GALLERY_OUT_MAX_WIDTH = 2560
+# AVIF/WebP quality (0-100). The hero is a full-bleed showcase image, so it gets
+# a high quality (≈ JPEG 90 in size); gallery thumbnails can be lighter.
+HERO_OUT_QUALITY = 82
+GALLERY_OUT_QUALITY = 68
+
+# All extensions a stored hero could have, so a re-upload clears stale files.
+_ALL_HERO_EXTS = ("jpg", "png", "webp", "avif")
+
+# Accepted *input* content types -> canonical extension (output is avif/webp).
 _CONTENT_TYPE_EXT = {
     "image/jpeg": "jpg",
     "image/png": "png",
+    "image/webp": "webp",
 }
+
+
+def _avif_available() -> bool:
+    try:
+        import pillow_avif  # noqa: F401  registers the AVIF plugin with Pillow
+
+        return True
+    except Exception:
+        return False
+
+
+AVIF_AVAILABLE = _avif_available()
+OUTPUT_EXT = "avif" if AVIF_AVAILABLE else "webp"
+
+
+def reencode_image(data: bytes, *, max_width: int, quality: int = HERO_OUT_QUALITY) -> tuple[bytes, str, int, int]:
+    """Downscale to ``max_width`` and encode to AVIF (or WebP). Returns
+    ``(bytes, ext, width, height)``. Raises :class:`HeroImageError` if unreadable."""
+    from PIL import Image, UnidentifiedImageError
+
+    if AVIF_AVAILABLE:
+        import pillow_avif  # noqa: F401
+
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            img = img.convert("RGB")
+            w, h = img.size
+            if w > max_width:
+                img = img.resize((max_width, round(h * max_width / w)), Image.LANCZOS)
+            out = io.BytesIO()
+            if AVIF_AVAILABLE:
+                img.save(out, format="AVIF", quality=quality)
+                ext = "avif"
+            else:
+                img.save(out, format="WEBP", quality=quality, method=6)
+                ext = "webp"
+            fw, fh = img.size
+    except (UnidentifiedImageError, OSError):
+        raise HeroImageError("Bild konnte nicht verarbeitet werden.")
+    return out.getvalue(), ext, fw, fh
 
 
 class HeroImageError(ValueError):
@@ -49,9 +110,9 @@ def validate_hero_image(data: bytes, content_type: str | None) -> tuple[int, int
     except (UnidentifiedImageError, OSError):
         raise HeroImageError("Bild konnte nicht gelesen werden.")
 
-    ext = {"JPEG": "jpg", "PNG": "png"}.get(fmt)
+    ext = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}.get(fmt)
     if ext is None:
-        raise HeroImageError("Format muss JPG oder PNG sein.")
+        raise HeroImageError("Format muss JPG, PNG oder WebP sein.")
 
     if width < HERO_MIN_WIDTH:
         raise HeroImageError(
@@ -76,7 +137,7 @@ def save_hero_image(spot_id, data: bytes, ext: str, *, media_dir: str, url_prefi
     """
     spot_dir = os.path.join(media_dir, "spots", str(spot_id))
     os.makedirs(spot_dir, exist_ok=True)
-    for existing_ext in _CONTENT_TYPE_EXT.values():
+    for existing_ext in _ALL_HERO_EXTS:
         stale = os.path.join(spot_dir, f"hero.{existing_ext}")
         if existing_ext != ext and os.path.exists(stale):
             os.remove(stale)
@@ -86,3 +147,75 @@ def save_hero_image(spot_id, data: bytes, ext: str, *, media_dir: str, url_prefi
         fh.write(data)
 
     return f"{url_prefix.rstrip('/')}/spots/{spot_id}/hero.{ext}"
+
+
+def save_region_hero_image(
+    region_id, data: bytes, ext: str, *, media_dir: str, url_prefix: str
+) -> str:
+    """Write a region hero to ``{media_dir}/regions/{region_id}/hero.{ext}``.
+
+    Mirrors :func:`save_hero_image` (a region has one hero); clears a stale
+    other-extension file so a re-upload can't leave two behind.
+    """
+    region_dir = os.path.join(media_dir, "regions", str(region_id))
+    os.makedirs(region_dir, exist_ok=True)
+    for existing_ext in _ALL_HERO_EXTS:
+        stale = os.path.join(region_dir, f"hero.{existing_ext}")
+        if existing_ext != ext and os.path.exists(stale):
+            os.remove(stale)
+    path = os.path.join(region_dir, f"hero.{ext}")
+    with open(path, "wb") as fh:
+        fh.write(data)
+    return f"{url_prefix.rstrip('/')}/regions/{region_id}/hero.{ext}"
+
+
+def _read_image(data: bytes) -> tuple[int, int, str]:
+    """Verify the bytes are a real JPG/PNG and return ``(width, height, ext)``."""
+    from PIL import Image, UnidentifiedImageError
+
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            img.verify()
+        with Image.open(io.BytesIO(data)) as img:
+            fmt = (img.format or "").upper()
+            width, height = img.size
+    except (UnidentifiedImageError, OSError):
+        raise HeroImageError("Bild konnte nicht gelesen werden.")
+    ext = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}.get(fmt)
+    if ext is None:
+        raise HeroImageError("Format muss JPG, PNG oder WebP sein.")
+    return width, height, ext
+
+
+def validate_gallery_image(data: bytes, content_type: str | None) -> tuple[int, int, str]:
+    """Validate a community gallery image against the moderate limits.
+
+    Raises :class:`HeroImageError` (→ 422, German) on failure; returns
+    ``(width, height, ext)`` on success.
+    """
+    if len(data) > GALLERY_MAX_BYTES:
+        mb = GALLERY_MAX_BYTES // (1024 * 1024)
+        raise HeroImageError(f"Datei zu groß (max. {mb} MB).")
+    width, height, ext = _read_image(data)
+    if width < GALLERY_MIN_WIDTH or height < GALLERY_MIN_HEIGHT:
+        raise HeroImageError(
+            f"Zu klein: {width}×{height} px — mindestens "
+            f"{GALLERY_MIN_WIDTH}×{GALLERY_MIN_HEIGHT} px nötig."
+        )
+    return width, height, ext
+
+
+def save_spot_image(
+    spot_id, image_id, data: bytes, ext: str, *, media_dir: str, url_prefix: str
+) -> str:
+    """Store a community image at ``{media_dir}/spots/{spot_id}/img/{image_id}.{ext}``.
+
+    Unlike the single hero, a spot has many of these, so each keeps its own id in
+    the filename. Returns the root-relative public URL.
+    """
+    img_dir = os.path.join(media_dir, "spots", str(spot_id), "img")
+    os.makedirs(img_dir, exist_ok=True)
+    path = os.path.join(img_dir, f"{image_id}.{ext}")
+    with open(path, "wb") as fh:
+        fh.write(data)
+    return f"{url_prefix.rstrip('/')}/spots/{spot_id}/img/{image_id}.{ext}"

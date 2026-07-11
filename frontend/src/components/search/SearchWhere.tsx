@@ -35,9 +35,11 @@ function Row({
 export default function SearchWhere({
   query,
   onPick,
+  onOpen,
 }: {
   query: string;
   onPick: (pick: WherePick) => void;
+  onOpen: () => void;
 }) {
   const { data: spots } = useSpots({ status: "published" });
   const { data: regions } = useRegions();
@@ -60,6 +62,15 @@ export default function SearchWhere({
   // Single narrow column: the panel is only as wide as the "Wohin?" field.
   return (
     <div className="flex flex-col gap-5">
+      {/* Open place axis — "unentschlossen" → ranks the best regions. */}
+      <button
+        type="button"
+        onClick={onOpen}
+        className="self-start rounded-full border border-brand-teal/50 px-3 py-1 text-[12px] font-medium text-brand-teal transition-colors hover:bg-brand-teal/5"
+      >
+        unentschlossen
+      </button>
+
       <div>
         <h3 className="mb-2 text-[13px] font-medium text-muted">Spots</h3>
         {spotHits.length ? (

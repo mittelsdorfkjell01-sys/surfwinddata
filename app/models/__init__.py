@@ -9,6 +9,17 @@ from app.models.notification import Notification
 from app.models.scoring_params import ScoringParams
 from app.models.spot_audit import SpotAudit
 from app.models.required_fields import RequiredField
+from app.models.admin_user import AdminUser
+from app.models.ugc import (
+    SpotRating,
+    LocalTip,
+    SpotSubmission,
+    SpotImage,
+    ImageReport,
+)
+from app.models.moderation_audit import ModerationAudit
+from app.models.team_note import TeamNote
+from app.models.board_task import BoardTask
 
 __all__ = [
     "Base",
@@ -20,4 +31,13 @@ __all__ = [
     "ScoringParams",
     "SpotAudit",
     "RequiredField",
+    "AdminUser",
+    "SpotRating",
+    "LocalTip",
+    "SpotSubmission",
+    "SpotImage",
+    "ImageReport",
+    "ModerationAudit",
+    "TeamNote",
+    "BoardTask",
 ]

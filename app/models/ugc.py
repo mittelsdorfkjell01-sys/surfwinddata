@@ -1,0 +1,168 @@
+"""User-generated-content models (Sprint C): ratings, local tips, spot
+submissions, images and image reports.
+
+Pseudonymous by design — each carries an ``author``/``submitter`` name and an
+optional, non-public email. A nullable ``app_user_id`` is reserved for a future
+real-account system (kept unconstrained here — no users table yet). ``ip_hash``
+holds a salted hash of the client IP for rate-limiting, never the raw address.
+
+Post-moderation: ratings/tips default to ``published`` and are hidden reactively;
+hero-candidate images default to ``pending`` and need an admin's approval.
+"""
+
+import uuid
+from datetime import datetime
+
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    SmallInteger,
+    String,
+    Text,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.base import Base, TimestampMixin
+
+
+def _pk() -> Mapped[uuid.UUID]:
+    return mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+
+
+class SpotRating(Base, TimestampMixin):
+    __tablename__ = "spot_ratings"
+
+    id: Mapped[uuid.UUID] = _pk()
+    spot_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("spots.id", ondelete="CASCADE"), nullable=False
+    )
+    stars: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    skill_level: Mapped[str] = mapped_column(String(20), nullable=False)
+    sport: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Required free text: which conditions were ridden (context for the stars).
+    conditions: Mapped[str] = mapped_column(Text, nullable=False)
+    author_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    author_email: Mapped[str | None] = mapped_column(String(255))  # not public
+    app_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'published'")
+    )
+    flagged: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    ip_hash: Mapped[str | None] = mapped_column(String(64))
+
+    __table_args__ = (
+        CheckConstraint("stars >= 1 AND stars <= 5", name="ck_rating_stars_1_5"),
+        Index("ix_rating_spot", "spot_id"),
+    )
+
+
+class LocalTip(Base, TimestampMixin):
+    __tablename__ = "local_tips"
+
+    id: Mapped[uuid.UUID] = _pk()
+    spot_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("spots.id", ondelete="CASCADE"), nullable=False
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    author_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    author_email: Mapped[str | None] = mapped_column(String(255))
+    app_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'published'")
+    )
+    flagged: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    ip_hash: Mapped[str | None] = mapped_column(String(64))
+
+    __table_args__ = (Index("ix_tip_spot", "spot_id"),)
+
+
+class SpotSubmission(Base, TimestampMixin):
+    """A user's proposal for a new spot. Stored as ``pending`` — never creates a
+    spot until an admin approves it (Sprint D)."""
+
+    __tablename__ = "spot_submissions"
+
+    id: Mapped[uuid.UUID] = _pk()
+    # Payload in the admin create_spot schema shape (validated, not applied).
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    submitter_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    submitter_email: Mapped[str | None] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=text("'pending'")
+    )
+    review_note: Mapped[str | None] = mapped_column(Text)
+    reviewed_by: Mapped[str | None] = mapped_column(String(120))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resulting_spot_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("spots.id", ondelete="SET NULL")
+    )
+    ip_hash: Mapped[str | None] = mapped_column(String(64))
+
+    __table_args__ = (Index("ix_submission_status", "status"),)
+
+
+class SpotImage(Base, TimestampMixin):
+    """A user-uploaded image — gallery photo or hero candidate. The versioned
+    license the uploader accepted is stored inline for provenance."""
+
+    __tablename__ = "spot_images"
+
+    id: Mapped[uuid.UUID] = _pk()
+    spot_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("spots.id", ondelete="CASCADE"), nullable=False
+    )
+    url: Mapped[str] = mapped_column(String(500), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)  # gallery | hero_candidate
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    source: Mapped[str] = mapped_column(
+        String(30), nullable=False, server_default=text("'user_upload'")
+    )
+    credit: Mapped[str | None] = mapped_column(String(200))  # name or IG handle
+    submitter_email: Mapped[str | None] = mapped_column(String(255))
+    app_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    license_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    license_accepted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    report_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    reviewed_by: Mapped[str | None] = mapped_column(String(120))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ip_hash: Mapped[str | None] = mapped_column(String(64))
+
+    __table_args__ = (Index("ix_image_spot_status", "spot_id", "status"),)
+
+
+class ImageReport(Base, TimestampMixin):
+    __tablename__ = "image_reports"
+
+    id: Mapped[uuid.UUID] = _pk()
+    image_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("spot_images.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    reason: Mapped[str] = mapped_column(String(30), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+    reporter_email: Mapped[str | None] = mapped_column(String(255))
+    ip_hash: Mapped[str | None] = mapped_column(String(64))
+
+    __table_args__ = (Index("ix_image_report_image", "image_id"),)

@@ -44,6 +44,8 @@ export default function SpotFlowMap({
   coast,
   period,
   waterType,
+  zoom,
+  mapCenter,
 }: {
   coords: [number, number];
   windDir: number; // degrees wind comes FROM
@@ -52,7 +54,12 @@ export default function SpotFlowMap({
   coast: number; // onshore bearing (degrees) — the beach the waves break onto
   period: number; // s
   waterType: WaterType;
+  zoom?: number; // admin-set preview zoom (default MAP_ZOOM)
+  mapCenter?: [number, number]; // admin-set preview center (default = coords)
 }) {
+  // Effective framing: admin's saved view wins, else default (spot-centred).
+  const effZoom = zoom ?? MAP_ZOOM;
+  const effCenter: [number, number] = mapCenter ?? coords;
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -112,6 +119,8 @@ export default function SpotFlowMap({
     const half = diag / 2;
     const swellTravel = (waveDir + 180) % 360; // bearing the waves move toward
     const travelRad = rad(swellTravel);
+    const cosT = Math.cos(travelRad);
+    const sinT = Math.sin(travelRad); // to map rotated crest points → screen px
     // Oblique angle between swell travel and onshore direction, clamped so the
     // waves always progress onshore (extreme obliquity would refract anyway).
     let dphi = ((coast - swellTravel + 540) % 360) - 180;
@@ -160,15 +169,21 @@ export default function SpotFlowMap({
     // chop can be restricted to the water. Falls back to "everywhere" if the
     // tiles can't be read (e.g. no CORS).
     async function buildWaterMask() {
-      if (waterType !== "chop" || w === 0 || h === 0) return;
-      const scale = 256 * Math.pow(2, MAP_ZOOM);
-      const latRad = rad(coords[0]);
-      const cwx = ((coords[1] + 180) / 360) * scale;
+      // Built for chop (place whitecaps on water) AND swell (clip crests off land).
+      if ((waterType !== "chop" && waterType !== "swell") || w === 0 || h === 0)
+        return;
+      // Sampling at tile-zoom 14: bail on very wide framings (the offscreen mask
+      // canvas would explode). Spot framings are ~13-15, so this only skips
+      // extreme region-wide zooms, where a land mask isn't meaningful anyway.
+      if (effZoom < 11) return;
+      const scale = 256 * Math.pow(2, effZoom);
+      const latRad = rad(effCenter[0]);
+      const cwx = ((effCenter[1] + 180) / 360) * scale;
       const cwy = ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale;
       const tlx = cwx - w / 2;
       const tly = cwy - h / 2;
       const zt = 14;
-      const f = Math.pow(2, zt - MAP_ZOOM); // display px → tile-zoom px
+      const f = Math.pow(2, zt - effZoom); // display px → tile-zoom px
       const mw = Math.max(1, Math.ceil(w * f));
       const mh = Math.max(1, Math.ceil(h * f));
       const tlxZt = tlx * f;
@@ -250,6 +265,16 @@ export default function SpotFlowMap({
               continue;
             }
             const yy = yBase + Math.sin(x * 0.03 + s * 0.05) * amp;
+            // Real coastlines aren't the straight modelled beach — clip any crest
+            // point that lands on actual land (sampled from the basemap tiles).
+            if (waterMask) {
+              const sx = w / 2 + (x * cosT - yy * sinT);
+              const sy = h / 2 + (x * sinT + yy * cosT);
+              if (!waterMask(sx, sy)) {
+                has = false; // over land → break the crest line here
+                continue;
+              }
+            }
             if (has) {
               if (d >= Dbreak) {
                 const p = Math.min(1, (d - Dbreak) / (Dshore - Dbreak));
@@ -349,13 +374,13 @@ export default function SpotFlowMap({
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [coords[0], coords[1], windDir, windKts, waveDir, coast, period, waterType]);
+  }, [effCenter[0], effCenter[1], effZoom, windDir, windKts, waveDir, coast, period, waterType]);
 
   return (
     <div ref={wrapRef} className="relative h-[360px] overflow-hidden rounded-2xl">
       <MapContainer
-        center={coords}
-        zoom={MAP_ZOOM}
+        center={effCenter}
+        zoom={effZoom}
         zoomSnap={0.5}
         zoomControl={false}
         scrollWheelZoom={false}

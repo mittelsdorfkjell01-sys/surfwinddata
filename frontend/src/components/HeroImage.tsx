@@ -27,13 +27,16 @@ export default function HeroImage({
   fallbackSrc,
   alt,
   className,
+  focal,
 }: {
   src: string;
   fallbackSrc?: string;
   alt: string;
   className?: string;
+  focal?: { x: number; y: number } | null;
 }) {
   const entry = src.startsWith("/") ? heroManifest[keyFromSrc(src)] : undefined;
+  const style = focal ? { objectPosition: `${focal.x}% ${focal.y}%` } : undefined;
 
   const onError = (e: React.SyntheticEvent<HTMLImageElement>) => {
     if (fallbackSrc && e.currentTarget.src !== fallbackSrc) {
@@ -42,7 +45,7 @@ export default function HeroImage({
   };
 
   if (!entry) {
-    return <img src={src} alt={alt} className={className} onError={onError} />;
+    return <img src={src} alt={alt} className={className} style={style} onError={onError} />;
   }
 
   const key = keyFromSrc(src);
@@ -56,7 +59,7 @@ export default function HeroImage({
           srcSet={entry.widths.map((w) => `/${key}-${w}.${fmt} ${w}w`).join(", ")}
         />
       ))}
-      <img src={entry.fallback} alt={alt} className={className} onError={onError} />
+      <img src={entry.fallback} alt={alt} className={className} style={style} onError={onError} />
     </picture>
   );
 }

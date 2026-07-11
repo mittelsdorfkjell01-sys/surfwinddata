@@ -39,6 +39,8 @@ export interface ImageRecord {
   source?: string;
   license?: string;
   credit?: string;
+  /** Focal point as object-position percentages (0..100). */
+  focal?: { x: number; y: number };
 }
 
 export type FacilityKind = "parking" | "shower" | "food" | "camping" | "school";
@@ -182,8 +184,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       : {}),
     ...((init?.headers as Record<string, string>) || {}),
   };
-  // Admin endpoints carry the shared key when one has been entered this session.
-  if (path.startsWith("/admin")) {
+  // LOCAL DEV break-glass: when VITE_ADMIN_KEY is set, send it on EVERY request
+  // (incl. /auth/me) so the admin area works without the cookie login. Falls back
+  // to a session-entered key on /admin only. Unset in prod → normal cookie auth.
+  const devKey = import.meta.env.VITE_ADMIN_KEY as string | undefined;
+  if (devKey) {
+    headers["X-Admin-Key"] = devKey;
+  } else if (path.startsWith("/admin")) {
     const key = getAdminKey();
     if (key) headers["X-Admin-Key"] = key;
   }
@@ -195,6 +202,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     resp = await fetch(`${API_BASE}${path}`, {
       ...init,
       headers,
+      // Send/receive the httpOnly session cookie (Sprint A auth) on every call.
+      credentials: "include",
       signal: controller.signal,
     });
   } catch (e) {
@@ -334,6 +343,519 @@ export const getBestRegions = (params: { sport?: string; month?: number; weeks?:
 export const getBestWeeks = (params: { region_id?: string; spot_id?: string; sport?: string; top?: number }) =>
   request<BestWeeksResponse>(`/areas/best-weeks${qs(params as Record<string, unknown>)}`);
 
+// --- auth (Sprint A) --------------------------------------------------------
+
+export type AdminRole = "admin" | "curator";
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  display_name: string;
+  role: AdminRole;
+}
+
+export const login = (email: string, password: string) =>
+  request<AuthUser>(`/auth/login`, {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+
+export const logout = () => request<void>(`/auth/logout`, { method: "POST" });
+
+export const getMe = () => request<AuthUser>(`/auth/me`);
+
+// --- admin user management (admin role only) -------------------------------
+
+export interface AdminUserRecord {
+  id: string;
+  email: string;
+  display_name: string;
+  role: AdminRole;
+  is_active: boolean;
+  last_login_at: string | null;
+  created_at: string;
+}
+
+export const getAdminUsers = () => request<AdminUserRecord[]>(`/admin/users`);
+
+export const createAdminUser = (body: {
+  email: string;
+  password: string;
+  display_name?: string;
+  role?: AdminRole;
+}) =>
+  request<AdminUserRecord>(`/admin/users`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const updateAdminUser = (
+  id: string,
+  body: { role?: AdminRole; is_active?: boolean; display_name?: string }
+) =>
+  request<AdminUserRecord>(`/admin/users/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+
+export const setAdminUserPassword = (id: string, password: string) =>
+  request<void>(`/admin/users/${id}/password`, {
+    method: "POST",
+    body: JSON.stringify({ password }),
+  });
+
+// --- community / UGC (Sprint C/D, public) ----------------------------------
+
+export interface RatingItem {
+  id: string;
+  stars: number;
+  skill_level: string;
+  sport: string;
+  conditions: string;
+  author_name: string;
+  created_at: string;
+}
+export interface RatingAggregate {
+  count: number;
+  avg: number | null;
+  score: number;
+}
+export const getRatings = (spotId: string) =>
+  request<{ items: RatingItem[]; aggregate: RatingAggregate }>(
+    `/spots/${spotId}/ratings`
+  );
+export const postRating = (
+  spotId: string,
+  body: {
+    stars: number;
+    skill_level: string;
+    sport: string;
+    conditions: string;
+    author_name?: string;
+    author_email?: string;
+    website?: string;
+  }
+) =>
+  request<RatingItem>(`/spots/${spotId}/ratings`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export interface TipItem {
+  id: string;
+  body: string;
+  author_name: string;
+  created_at: string;
+}
+export const getTips = (spotId: string) =>
+  request<{ items: TipItem[] }>(`/spots/${spotId}/tips`);
+export const postTip = (
+  spotId: string,
+  body: { body: string; author_name?: string; author_email?: string; website?: string }
+) =>
+  request<TipItem>(`/spots/${spotId}/tips`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export interface CommunityImage {
+  id: string;
+  url: string;
+  kind: string;
+  width: number | null;
+  height: number | null;
+  credit: string | null;
+  created_at: string;
+}
+export const getSpotImages = (spotId: string) =>
+  request<{ items: CommunityImage[] }>(`/spots/${spotId}/images`);
+
+export function uploadSpotImage(
+  spotId: string,
+  file: File,
+  kind: "gallery" | "hero_candidate",
+  opts: { credit?: string; licenseAccept: boolean } = { licenseAccept: false }
+): Promise<CommunityImage> {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("kind", kind);
+  fd.append("license_accept", String(opts.licenseAccept));
+  if (opts.credit) fd.append("credit", opts.credit);
+  return request<CommunityImage>(`/spots/${spotId}/images`, {
+    method: "POST",
+    body: fd,
+  });
+}
+
+export const reportImage = (
+  imageId: string,
+  body: { reason: string; note?: string; reporter_email?: string; website?: string }
+) =>
+  request<{ image_id: string; report_count: number; takedown_contact: string | null }>(
+    `/images/${imageId}/report`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+
+export const getImageLicense = () =>
+  request<{ version: string; terms: string }>(`/community/license`);
+
+export const postSubmission = (body: {
+  payload: Record<string, unknown>;
+  submitter_name?: string;
+  submitter_email?: string;
+  website?: string;
+}) =>
+  request<{ id: string; status: string }>(`/submissions`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+// --- admin moderation (Sprint D) -------------------------------------------
+
+export interface ReviewCounts {
+  submissions_pending: number;
+  hero_candidates_pending: number;
+  reported_images: number;
+  flagged_tips: number;
+  flagged_ratings: number;
+}
+export interface ReviewSubmission {
+  id: string;
+  name: string | null;
+  submitter_name: string;
+  status: string;
+  created_at: string;
+  payload: Record<string, unknown>;
+}
+export interface ReviewImage {
+  id: string;
+  spot_id: string;
+  url: string;
+  kind: string;
+  credit: string | null;
+  status: string;
+  report_count: number;
+  created_at: string;
+}
+export interface ReviewTip {
+  id: string;
+  spot_id: string;
+  body: string;
+  author_name: string;
+  status: string;
+  flagged: boolean;
+  created_at: string;
+}
+export interface ReviewRating {
+  id: string;
+  spot_id: string;
+  stars: number;
+  conditions: string;
+  author_name: string;
+  status: string;
+  flagged: boolean;
+  created_at: string;
+}
+export interface ReviewQueue {
+  counts: ReviewCounts;
+  submissions: ReviewSubmission[];
+  hero_candidates: ReviewImage[];
+  reported_images: ReviewImage[];
+  tips: ReviewTip[];
+  ratings: ReviewRating[];
+}
+
+export const getReviewQueue = () => request<ReviewQueue>(`/admin/review/queue`);
+
+export const approveSubmission = (id: string) =>
+  request<{ spot_id: string; status: string }>(
+    `/admin/submissions/${id}/approve`,
+    { method: "POST" }
+  );
+export const rejectSubmission = (id: string, note?: string) =>
+  request<{ status: string }>(`/admin/submissions/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
+export const approveImage = (id: string) =>
+  request<{ id: string; status: string }>(`/admin/images/${id}/approve`, {
+    method: "POST",
+  });
+export const rejectImage = (id: string, note?: string) =>
+  request<{ id: string; status: string }>(`/admin/images/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
+export const removeImage = (id: string, note?: string) =>
+  request<{ id: string; status: string }>(`/admin/images/${id}/remove`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
+export const dismissReports = (id: string) =>
+  request<{ id: string; report_count: number }>(
+    `/admin/images/${id}/dismiss-reports`,
+    { method: "POST" }
+  );
+export const hideTip = (id: string) =>
+  request<{ id: string; status: string }>(`/admin/tips/${id}/hide`, { method: "POST" });
+export const restoreTip = (id: string) =>
+  request<{ id: string; status: string }>(`/admin/tips/${id}/restore`, {
+    method: "POST",
+  });
+export const hideRating = (id: string) =>
+  request<{ id: string; status: string }>(`/admin/ratings/${id}/hide`, {
+    method: "POST",
+  });
+export const restoreRating = (id: string) =>
+  request<{ id: string; status: string }>(`/admin/ratings/${id}/restore`, {
+    method: "POST",
+  });
+
+// --- admin dashboard (Sprint B) --------------------------------------------
+
+export interface StatusCounts {
+  draft: number;
+  published: number;
+  archived: number;
+  total: number;
+}
+
+export interface NotLiveSpot {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  region_id: string;
+  gaps: string[];
+}
+
+export interface LastChange {
+  action: string;
+  fields: string[];
+  at: string | null;
+}
+export interface RecentSpot {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  region_id: string;
+  confidence: number | null;
+  updated_at: string;
+  last_change: LastChange | null;
+}
+
+export interface TeamNote {
+  id: string;
+  author: string | null;
+  body: string;
+  created_at: string;
+}
+
+export interface AdminOverview {
+  spots: StatusCounts;
+  regions: number;
+  readiness_open: number;
+  not_live: NotLiveSpot[];
+  recent: RecentSpot[];
+  review: Record<string, number>;
+  team_notes: TeamNote[];
+  era5_queued: number;
+}
+
+export const getAdminOverview = () => request<AdminOverview>(`/admin/overview`);
+
+// --- team notes + activity (admin) -----------------------------------------
+
+export const getTeamNotes = () => request<TeamNote[]>(`/admin/team-notes`);
+export const createTeamNote = (body: string) =>
+  request<TeamNote>(`/admin/team-notes`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+export const deleteTeamNote = (id: string) =>
+  request<void>(`/admin/team-notes/${id}`, { method: "DELETE" });
+
+export interface ActivityItem {
+  actor: string | null;
+  action: string;
+  label: string;
+  target: string | null;
+  target_id: string | null;
+  kind: string;
+  fields: string[];
+  at: string | null;
+}
+export const getActivity = () => request<ActivityItem[]>(`/admin/activity`);
+
+// --- board tasks (kanban overview) -----------------------------------------
+
+export interface BoardTask {
+  id: string;
+  title: string;
+  body: string | null;
+  status: "open" | "done";
+  author: string | null;
+  created_at: string;
+}
+export const getBoardTasks = () => request<BoardTask[]>(`/admin/board/tasks`);
+export const createBoardTask = (title: string, body?: string) =>
+  request<BoardTask>(`/admin/board/tasks`, {
+    method: "POST",
+    body: JSON.stringify({ title, body }),
+  });
+export const updateBoardTask = (
+  id: string,
+  patch: { status?: "open" | "done"; title?: string; body?: string }
+) =>
+  request<BoardTask>(`/admin/board/tasks/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+export const deleteBoardTask = (id: string) =>
+  request<void>(`/admin/board/tasks/${id}`, { method: "DELETE" });
+
+export interface AdminSpotsQuery {
+  status?: string;
+  region_id?: string;
+  sport?: string;
+  q?: string;
+  sort?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AdminSpotsResponse {
+  items: SpotSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export const getAdminSpots = (params: AdminSpotsQuery = {}) =>
+  request<AdminSpotsResponse>(
+    `/admin/spots${qs(params as Record<string, unknown>)}`
+  );
+
+export interface AdminRegionEntry {
+  region: Region;
+  spot_counts: StatusCounts;
+}
+
+export const getAdminRegions = () =>
+  request<AdminRegionEntry[]>(`/admin/regions`);
+
+export interface GeocodeHit {
+  name: string;
+  lat: number;
+  lon: number;
+  country: string | null;
+  feature_code: string | null;
+}
+export const geocodeAdmin = (q: string) =>
+  request<GeocodeHit[]>(`/admin/geocode${qs({ q })}`);
+
+export interface RegionCreateBody {
+  name: string;
+  slug?: string;
+  country?: string | null;
+  // Optional — when omitted the backend geocodes the name to a centre + bounds.
+  lat?: number;
+  lon?: number;
+  defaults?: Record<string, unknown> | null;
+}
+
+export const createRegion = (body: RegionCreateBody) =>
+  request<Region>(`/admin/regions`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const updateRegionDefaults = (
+  id: string,
+  defaults: Record<string, unknown>
+) =>
+  request<Region>(`/admin/regions/${id}/defaults`, {
+    method: "PATCH",
+    body: JSON.stringify({ defaults }),
+  });
+
+export const setRegionStockImage = (id: string) =>
+  request<Region>(`/admin/regions/${id}/stock-image`, { method: "POST" });
+
+export const updateRegion = (
+  id: string,
+  body: {
+    name?: string;
+    description?: string | null;
+    defaults?: Record<string, unknown>;
+    season?: Record<string, unknown> | null;
+  }
+) =>
+  request<Region>(`/admin/regions/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+
+export const setRegionImageManual = (
+  id: string,
+  body: { url: string; credit: string; source?: string; license?: string }
+) =>
+  request<Region>(`/admin/regions/${id}/image`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export function uploadRegionImage(id: string, file: File, credit: string): Promise<Region> {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("credit", credit);
+  return request<Region>(`/admin/regions/${id}/image/upload`, {
+    method: "POST",
+    body: fd,
+  });
+}
+
+/** Move a spot into a region (reassign). */
+export const assignSpotRegion = (spotId: string, regionId: string) =>
+  request<SpotRead>(`/admin/spots/${spotId}/assign-region`, {
+    method: "POST",
+    body: JSON.stringify({ region_id: regionId }),
+  });
+
+// --- admin spot actions (go-live / ERA5) -----------------------------------
+
+export interface Era5Status {
+  spot_id?: string;
+  status?: string;
+  [k: string]: unknown;
+}
+
+export const goLiveSpot = (id: string) =>
+  request<Record<string, unknown>>(`/admin/spots/${id}/live`, { method: "POST" });
+
+export const unpublishSpot = (id: string) =>
+  request<{ spot_id: string; status: string }>(`/admin/spots/${id}/unpublish`, {
+    method: "POST",
+  });
+
+export const archiveSpot = (id: string) =>
+  request<{ spot_id: string; status: string }>(`/admin/spots/${id}/archive`, {
+    method: "POST",
+  });
+
+export const triggerEra5 = (id: string) =>
+  request<Era5Status>(`/admin/spots/${id}/era5`, { method: "POST" });
+
+export const getEra5Status = (id: string) =>
+  request<Era5Status>(`/admin/spots/${id}/era5`);
+
+/** Kick off background processing of all queued ERA5 jobs. */
+export const processEra5Queue = () =>
+  request<{ queued: number; scheduled: boolean }>(`/admin/era5/process-queue`, {
+    method: "POST",
+  });
+
 // --- admin endpoints -------------------------------------------------------
 
 export interface SpotCreateBody {
@@ -369,6 +891,18 @@ export const updateSpot = (id: string, body: SpotUpdateBody) =>
 
 export const getReadiness = (id: string) =>
   request<Readiness>(`/admin/spots/${id}/readiness`);
+
+export const setSpotImageFocal = (id: string, x: number, y: number) =>
+  request<SpotRead>(`/admin/spots/${id}/image/focal`, {
+    method: "POST",
+    body: JSON.stringify({ x, y }),
+  });
+
+export const setRegionImageFocal = (id: string, x: number, y: number) =>
+  request<Region>(`/admin/regions/${id}/image/focal`, {
+    method: "POST",
+    body: JSON.stringify({ x, y }),
+  });
 
 export async function uploadHeroImage(
   id: string,

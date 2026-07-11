@@ -80,7 +80,18 @@ export default function SearchBar() {
 
   const pickWhere = (pick: WherePick) => {
     addRecent({ label: pick.label, kind: pick.kind, id: pick.id, country: pick.country });
-    setVal((v) => ({ ...v, whereSel: { label: pick.label, kind: pick.kind, id: pick.id }, whereText: pick.label }));
+    setVal((v) => ({
+      ...v,
+      whereSel: { label: pick.label, kind: pick.kind, id: pick.id },
+      whereText: pick.label,
+      whereOpen: false,
+    }));
+    close();
+  };
+
+  // Open place axis ("unentschlossen").
+  const openWherePlace = () => {
+    setVal((v) => ({ ...v, whereOpen: true, whereSel: null, whereText: "unentschlossen" }));
     close();
   };
 
@@ -113,7 +124,7 @@ export default function SearchBar() {
               value={val.whereText}
               onFocus={() => openSeg("where", whereRef.current)}
               onChange={(e) =>
-                setVal((v) => ({ ...v, whereText: e.target.value, whereSel: null }))
+                setVal((v) => ({ ...v, whereText: e.target.value, whereSel: null, whereOpen: false }))
               }
               placeholder="Region oder Spot suchen"
               aria-label="Wohin?"
@@ -215,7 +226,9 @@ export default function SearchBar() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.18, ease: "easeOut" }}
                   >
-                    {open === "where" && <SearchWhere query={val.whereText} onPick={pickWhere} />}
+                    {open === "where" && (
+                      <SearchWhere query={val.whereText} onPick={pickWhere} onOpen={openWherePlace} />
+                    )}
                     {open === "when" && (
                       <SearchWhen
                         value={val.when}
