@@ -123,12 +123,24 @@ def request_era5_extract(
     return job
 
 
-def _job_for_request(db: Session, cds_request_id: str) -> Era5Job | None:
-    return db.scalar(
-        select(Era5Job).where(
-            Era5Job.params["cds_request_id"].astext == cds_request_id
-        )
+def _job_for_request(
+    db: Session, cds_request_id: str, spot_id=None
+) -> Era5Job | None:
+    """Find the Era5Job for a request id, optionally scoped to one spot.
+
+    ``spot_id`` matters because the Open-Meteo seam derives ``cds_request_id``
+    from the *grid cell* (``omh|lat|lon|y0|y1``), so every spot sharing a 0.25°
+    cell carries the SAME id. Polling one spot must resolve *its own* job — an
+    unscoped lookup could return a cell-sibling's already-derived job and leave
+    this spot without a raw extract (``build_climatology_record`` then raising
+    ``LookupError: no ERA5 raw extract for spot``). Latest job first.
+    """
+    stmt = select(Era5Job).where(
+        Era5Job.params["cds_request_id"].astext == cds_request_id
     )
+    if spot_id is not None:
+        stmt = stmt.where(Era5Job.spot_id == spot_id)
+    return db.scalar(stmt.order_by(Era5Job.created_at.desc()))
 
 
 def poll_cds_job(
@@ -137,6 +149,7 @@ def poll_cds_job(
     db: Session,
     client: CdsClient,
     raw_dir: str | None = None,
+    spot_id=None,
 ) -> Era5Job:
     """Poll CDS; on completion download the raw extract and advance the job.
 
@@ -144,8 +157,11 @@ def poll_cds_job(
     raw Parquet written, ``raw_path`` set, status 'extracting'; failed ->
     'failed' with an error message. Re-polling a job that already has a
     ``raw_path`` is a no-op.
+
+    Pass ``spot_id`` to scope the job lookup to one spot — required when the
+    ``cds_request_id`` is cell-based (Open-Meteo) and shared by cell-siblings.
     """
-    job = _job_for_request(db, cds_request_id)
+    job = _job_for_request(db, cds_request_id, spot_id=spot_id)
     if job is None:
         raise LookupError(f"no ERA5 job for cds_request_id={cds_request_id!r}")
     if job.raw_path:
