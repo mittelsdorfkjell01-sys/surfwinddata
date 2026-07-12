@@ -7,6 +7,9 @@
   "functions": {
     "api/index.py": { "maxDuration": 60, "memory": 1024 }
   },
+  "redirects": [
+    { "source": "/", "destination": "/admin", "permanent": false }
+  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index" },
     { "source": "/(.*)", "destination": "/index.html" }
