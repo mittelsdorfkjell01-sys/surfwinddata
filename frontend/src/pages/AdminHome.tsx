@@ -1,65 +1,42 @@
-// Admin overview as a two-column kanban board:
-//   • Offen — spots that aren't live (readiness open) + manual tasks (add via +)
-//   • Fertig / Review — tasks dragged over from the left; review and dismiss (×)
-// Drag a task between columns to change its status (native HTML5 drag & drop).
+// Admin overview as three columns:
+//   • Offene Punkte     — spots with missing parts (incomplete uploads), per-gap
+//   • Entwürfe          — the draft pipeline (each with its open-point count)
+//   • Gemeldete Beiträge — reported/flagged community contributions to moderate
+// Incomplete spots are saved as drafts (the create path never blocks on missing
+// fields), so they flow into "Offene Punkte" / "Entwürfe" to be completed later.
 
-import { useEffect, useState, type DragEvent, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ApiError,
-  createBoardTask,
-  deleteBoardTask,
   getAdminOverview,
-  getBoardTasks,
-  updateBoardTask,
   type AdminOverview,
-  type BoardTask,
 } from "../lib/api";
 import { gapLabel } from "../lib/labels";
 
+// review-queue keys → German labels. Split into "reported" (user-flagged) and
+// "pending" (awaiting a first review).
+const REPORTED: { key: string; label: string }[] = [
+  { key: "reported_images", label: "Gemeldete Bilder" },
+  { key: "flagged_tips", label: "Gemeldete Tipps" },
+  { key: "flagged_ratings", label: "Gemeldete Bewertungen" },
+];
+const PENDING: { key: string; label: string }[] = [
+  { key: "submissions_pending", label: "Neue Spot-Vorschläge" },
+  { key: "hero_candidates_pending", label: "Neue Bild-Vorschläge" },
+];
+
 export default function AdminHome() {
   const [data, setData] = useState<AdminOverview | null>(null);
-  const [tasks, setTasks] = useState<BoardTask[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState<"open" | "done" | null>(null);
 
-  const load = () =>
-    Promise.all([getAdminOverview(), getBoardTasks()])
-      .then(([o, t]) => {
-        setData(o);
-        setTasks(t);
-      })
+  useEffect(() => {
+    getAdminOverview()
+      .then(setData)
       .catch((e) =>
         setError(e instanceof ApiError ? e.message : "Laden fehlgeschlagen.")
       );
-
-  useEffect(() => {
-    void load();
   }, []);
-
-  const move = async (id: string, status: "open" | "done") => {
-    setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, status } : t))); // optimistic
-    try {
-      await updateBoardTask(id, { status });
-    } catch {
-      await load();
-    }
-  };
-
-  const remove = async (id: string) => {
-    setTasks((ts) => ts.filter((t) => t.id !== id));
-    await deleteBoardTask(id).catch(() => load());
-  };
-
-  const onDrop = (col: "open" | "done") => (e: DragEvent) => {
-    e.preventDefault();
-    setDragOver(null);
-    const id = e.dataTransfer.getData("text/plain");
-    if (id) void move(id, col);
-  };
-
-  const openTasks = tasks.filter((t) => t.status === "open");
-  const doneTasks = tasks.filter((t) => t.status === "done");
 
   if (error) {
     return (
@@ -70,13 +47,26 @@ export default function AdminHome() {
   }
   if (!data) return <div className="text-[14px] text-muted">Lädt…</div>;
 
+  const review = data.review ?? {};
+  const reportedTotal = REPORTED.reduce((n, r) => n + (review[r.key] ?? 0), 0);
+
   return (
     <div>
-      <h1 className="text-[24px] font-semibold text-navy">Übersicht</h1>
-      <p className="mt-1 text-[14px] text-muted">
-        Board: links Offenes (nicht-live Spots + Aufgaben), rechts Fertig/Review.
-        Aufgaben per Drag-and-Drop verschieben.
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[24px] font-semibold text-navy">Übersicht</h1>
+          <p className="mt-1 text-[14px] text-muted">
+            Offene Punkte, Entwürfe und gemeldete Beiträge auf einen Blick.
+            Unvollständige Spots werden als Entwurf gespeichert und hier gelistet.
+          </p>
+        </div>
+        <Link
+          to="/admin/spot/new"
+          className="shrink-0 rounded-xl bg-navy px-4 py-2 text-[14px] font-medium text-white hover:bg-navy-dark"
+        >
+          + Neuer Spot
+        </Link>
+      </div>
 
       {data.era5_queued > 0 && (
         <div className="mt-4 rounded-2xl border border-line bg-brand-orange/5 p-3 text-[13px] text-muted">
@@ -106,203 +96,128 @@ export default function AdminHome() {
         <Tile label="Regionen" value={data.regions} to="/admin/regions" />
       </div>
 
-      {/* Kanban board */}
-      <div className="mt-8 grid gap-4 md:grid-cols-2">
-        {/* Left: Offen */}
-        <section
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragOver("open");
-          }}
-          onDragLeave={() => setDragOver(null)}
-          onDrop={onDrop("open")}
-          className={`rounded-2xl border p-4 ${
-            dragOver === "open" ? "border-navy bg-navy/5" : "border-line bg-white"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <h2 className="text-[15px] font-semibold text-navy">
-              Offen{" "}
-              <span className="text-[13px] font-normal text-muted">
-                ({data.not_live.length + openTasks.length})
-              </span>
-            </h2>
-          </div>
-
-          <AddTask
-            onAdd={async (title, body) => {
-              await createBoardTask(title, body);
-              await load();
-            }}
-            onError={setError}
-          />
-
-          {/* Not-live spots (auto, info) */}
-          {data.not_live.map((s) => (
-            <div key={s.id} className="mt-2 rounded-xl bg-cream p-3">
-              <div className="flex items-center justify-between gap-2">
-                <Link to={`/admin/spot/${s.id}/edit`} className="text-[14px] font-medium text-navy hover:underline">
-                  {s.name}
-                </Link>
-                <span className="shrink-0 rounded-full bg-navy/5 px-2 py-0.5 text-[11px] text-navy/60">
-                  Spot
-                </span>
-              </div>
-              <div className="mt-0.5 text-[12px] text-muted">
-                Fehlt: {s.gaps.map(gapLabel).join(", ")}
-              </div>
-            </div>
-          ))}
-
-          {/* Open tasks (draggable) */}
-          {openTasks.map((t) => (
-            <TaskCard key={t.id} task={t} onDelete={() => remove(t.id)} />
-          ))}
-
-          {data.not_live.length === 0 && openTasks.length === 0 && (
-            <p className="mt-3 text-[13px] text-muted">Nichts offen. 🎉</p>
-          )}
-        </section>
-
-        {/* Right: Fertig / Review */}
-        <section
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragOver("done");
-          }}
-          onDragLeave={() => setDragOver(null)}
-          onDrop={onDrop("done")}
-          className={`rounded-2xl border p-4 ${
-            dragOver === "done" ? "border-brand-green bg-brand-green/5" : "border-line bg-white"
-          }`}
-        >
-          <h2 className="text-[15px] font-semibold text-navy">
-            Fertig / Review{" "}
-            <span className="text-[13px] font-normal text-muted">({doneTasks.length})</span>
-          </h2>
-          {doneTasks.length === 0 ? (
-            <p className="mt-3 text-[13px] text-muted">
-              Erledigte Aufgaben hierher ziehen, prüfen und mit × wegklicken.
-            </p>
+      {/* Three columns */}
+      <div className="mt-8 grid gap-4 lg:grid-cols-3">
+        {/* 1 — Offene Punkte */}
+        <Column title="Offene Punkte" count={data.not_live.length} accent="orange">
+          {data.not_live.length === 0 ? (
+            <Empty>Keine offenen Punkte. 🎉</Empty>
           ) : (
-            doneTasks.map((t) => (
-              <TaskCard key={t.id} task={t} done onDelete={() => remove(t.id)} />
+            data.not_live.map((s) => (
+              <Link
+                key={s.id}
+                to={`/admin/spot/${s.id}/edit`}
+                className="block rounded-xl bg-cream p-3 transition-colors hover:bg-brand-orange/10"
+              >
+                <p className="text-[14px] font-medium text-navy">{s.name}</p>
+                <p className="mt-0.5 text-[12px] text-muted">
+                  Fehlt: {s.gaps.map(gapLabel).join(", ")}
+                </p>
+              </Link>
             ))
           )}
-        </section>
+        </Column>
+
+        {/* 2 — Entwürfe */}
+        <Column title="Entwürfe" count={data.drafts.length} accent="navy">
+          {data.drafts.length === 0 ? (
+            <Empty>Keine Entwürfe.</Empty>
+          ) : (
+            data.drafts.map((s) => (
+              <Link
+                key={s.id}
+                to={`/admin/spot/${s.id}/edit`}
+                className="flex items-center justify-between gap-2 rounded-xl border border-line bg-white p-3 transition-colors hover:bg-navy/5"
+              >
+                <span className="min-w-0 truncate text-[14px] font-medium text-navy">
+                  {s.name}
+                </span>
+                {s.ready ? (
+                  <span className="shrink-0 rounded-full bg-brand-green/10 px-2 py-0.5 text-[11px] font-medium text-brand-green">
+                    bereit
+                  </span>
+                ) : (
+                  <span className="shrink-0 rounded-full bg-brand-orange/10 px-2 py-0.5 text-[11px] font-medium text-brand-orange">
+                    {s.gaps.length} offen
+                  </span>
+                )}
+              </Link>
+            ))
+          )}
+        </Column>
+
+        {/* 3 — Gemeldete Beiträge */}
+        <Column title="Gemeldete Beiträge" count={reportedTotal} accent="red">
+          {REPORTED.map((r) => (
+            <ReviewRow key={r.key} label={r.label} value={review[r.key] ?? 0} />
+          ))}
+
+          <div className="mt-3 border-t border-line pt-3">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+              Weitere Prüfung
+            </p>
+            {PENDING.map((r) => (
+              <ReviewRow key={r.key} label={r.label} value={review[r.key] ?? 0} />
+            ))}
+          </div>
+
+          <Link
+            to="/admin/review"
+            className="mt-3 block rounded-xl bg-navy px-3 py-2 text-center text-[13px] font-medium text-white hover:bg-navy-dark"
+          >
+            Zur Moderation
+          </Link>
+        </Column>
       </div>
     </div>
   );
 }
 
-function TaskCard({
-  task,
-  done,
-  onDelete,
+function Column({
+  title,
+  count,
+  accent,
+  children,
 }: {
-  task: BoardTask;
-  done?: boolean;
-  onDelete: () => void;
+  title: string;
+  count: number;
+  accent: "orange" | "navy" | "red";
+  children: React.ReactNode;
 }) {
+  const dot =
+    accent === "orange" ? "bg-brand-orange" : accent === "red" ? "bg-red-500" : "bg-navy";
   return (
-    <div
-      draggable
-      onDragStart={(e) => e.dataTransfer.setData("text/plain", task.id)}
-      className={`mt-2 cursor-grab rounded-xl border p-3 active:cursor-grabbing ${
-        done ? "border-brand-green/30 bg-brand-green/5" : "border-line bg-white"
-      }`}
+    <section className="rounded-2xl border border-line bg-white p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <span className={`inline-block h-2 w-2 rounded-full ${dot}`} />
+        <h2 className="text-[15px] font-semibold text-navy">{title}</h2>
+        <span className="text-[13px] font-normal text-muted">({count})</span>
+      </div>
+      <div className="space-y-2">{children}</div>
+    </section>
+  );
+}
+
+function ReviewRow({ label, value }: { label: string; value: number }) {
+  return (
+    <Link
+      to="/admin/review"
+      className="flex items-center justify-between rounded-xl px-3 py-2 transition-colors hover:bg-navy/5"
     >
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-[14px] font-medium text-navy">{task.title}</p>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="shrink-0 text-[14px] text-muted hover:text-red-600"
-          aria-label="Aufgabe entfernen"
-        >
-          ×
-        </button>
-      </div>
-      {task.body && <p className="mt-1 whitespace-pre-wrap text-[13px] text-navy/75">{task.body}</p>}
-      {task.author && <p className="mt-1 text-[11px] text-muted">{task.author}</p>}
-    </div>
+      <span className="text-[14px] text-navy">{label}</span>
+      <span
+        className={`min-w-[24px] rounded-full px-2 py-0.5 text-center text-[12px] font-semibold ${
+          value > 0 ? "bg-red-50 text-red-700" : "bg-line/60 text-muted"
+        }`}
+      >
+        {value}
+      </span>
+    </Link>
   );
 }
 
-function AddTask({
-  onAdd,
-  onError,
-}: {
-  onAdd: (title: string, body?: string) => Promise<void>;
-  onError: (msg: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-    setBusy(true);
-    try {
-      await onAdd(title.trim(), body.trim() || undefined);
-      setTitle("");
-      setBody("");
-      setOpen(false);
-    } catch (err) {
-      onError(err instanceof ApiError ? err.message : "Anlegen fehlgeschlagen.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const input =
-    "w-full rounded-xl border border-navy/15 bg-white px-3 py-2 text-[14px] text-navy outline-none focus:border-navy/40";
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="mt-2 w-full rounded-xl border border-dashed border-navy/25 px-3 py-2 text-[13px] font-medium text-navy hover:bg-navy/5"
-      >
-        + Aufgabe
-      </button>
-    );
-  }
-
-  return (
-    <form onSubmit={submit} className="mt-2 rounded-xl bg-navy/5 p-3">
-      <input
-        autoFocus
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="Titel"
-        className={input}
-        required
-      />
-      <textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        placeholder="Beschreibung (optional)"
-        className={`mt-2 ${input}`}
-        rows={2}
-      />
-      <div className="mt-2 flex gap-2">
-        <button
-          type="submit"
-          disabled={busy || !title.trim()}
-          className="rounded-lg bg-navy px-3 py-1.5 text-[13px] font-medium text-white hover:bg-navy-dark disabled:opacity-50"
-        >
-          Hinzufügen
-        </button>
-        <button type="button" onClick={() => setOpen(false)} className="rounded-lg px-3 py-1.5 text-[13px] text-muted hover:text-navy">
-          Abbrechen
-        </button>
-      </div>
-    </form>
-  );
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="py-2 text-[13px] text-muted">{children}</p>;
 }
 
 function Tile({

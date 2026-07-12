@@ -314,8 +314,9 @@ export default function AdminSpotForm() {
         {isEdit ? "Spot bearbeiten" : "Neuen Spot anlegen"}
       </h1>
       <p className="mt-2 text-[15px] text-muted">
-        Alle redaktionellen Felder. Live-Wetter und Klimatologie werden separat
-        über die Datenfeeds gezogen.
+        Nur Name, Region und Position sind zum Speichern nötig — fehlende Teile
+        sind ok: der Spot wird als Entwurf gespeichert und erscheint in der
+        Übersicht unter „Offene Punkte", um ihn später zu ergänzen.
       </p>
 
       <form

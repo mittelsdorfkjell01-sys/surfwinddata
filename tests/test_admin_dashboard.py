@@ -25,9 +25,9 @@ def test_overview_shape_and_counts(client):
     resp = client.get("/admin/overview")
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert set(["spots", "regions", "readiness_open", "not_live", "recent", "review"]).issubset(
-        body
-    )
+    assert set(
+        ["spots", "regions", "readiness_open", "not_live", "drafts", "recent", "review"]
+    ).issubset(body)
     assert body["spots"]["total"] >= 1
     # total equals the sum of the per-status buckets
     assert body["spots"]["total"] == (
@@ -69,6 +69,44 @@ def test_regions_with_spot_counts(client):
         assert "region" in entry and "spot_counts" in entry
         counts = entry["spot_counts"]
         assert counts["total"] == counts["draft"] + counts["published"] + counts["archived"]
+
+
+def test_incomplete_spot_is_saved_and_shows_as_open_points(db):
+    """A spot uploaded with only the mandatory parts is saved as a draft and
+    surfaces in both the 'Entwürfe' (drafts) and 'Offene Punkte' (not_live)
+    columns with its missing fields listed."""
+    from sqlalchemy import delete, select
+
+    from app.admin import dashboard as dash
+    from app.admin.spots import create_spot
+    from app.models import Era5Job, Region, Spot
+
+    region = db.scalar(select(Region))
+    spot = create_spot(
+        {
+            "name": "ZZ Unvollständig Test",
+            "region_id": region.id,
+            "lat": 54.0,
+            "lon": 10.0,
+            "sports": ["kitesurf"],
+        },
+        db=db,
+        actor="test",
+    )
+    try:
+        assert spot.status == "draft"
+        ov = dash.overview(db)
+
+        draft = next((d for d in ov["drafts"] if d["id"] == str(spot.id)), None)
+        assert draft is not None, "incomplete spot missing from drafts column"
+        assert draft["ready"] is False
+        assert draft["gaps"], "an incomplete spot must list open points"
+
+        assert str(spot.id) in {s["id"] for s in ov["not_live"]}
+    finally:
+        db.execute(delete(Era5Job).where(Era5Job.spot_id == spot.id))
+        db.execute(delete(Spot).where(Spot.id == spot.id))
+        db.commit()
 
 
 def test_dashboard_requires_auth(anon_client):
