@@ -15,6 +15,8 @@ from __future__ import annotations
 import io
 import os
 
+from app.media import storage
+
 # --- input requirements (mirror of frontend HERO_REQ) ----------------------
 HERO_MIN_WIDTH = 3840
 HERO_MIN_HEIGHT = 2000
@@ -133,20 +135,14 @@ def save_hero_image(spot_id, data: bytes, ext: str, *, media_dir: str, url_prefi
 
     Removes any previously-stored hero (a spot has exactly one) so a re-upload
     with a different extension can't leave a stale file behind. Returns the
-    root-relative public URL.
-    """
-    spot_dir = os.path.join(media_dir, "spots", str(spot_id))
-    os.makedirs(spot_dir, exist_ok=True)
+    public URL (root-relative for local storage, absolute for Blob)."""
     for existing_ext in _ALL_HERO_EXTS:
-        stale = os.path.join(spot_dir, f"hero.{existing_ext}")
-        if existing_ext != ext and os.path.exists(stale):
-            os.remove(stale)
-
-    path = os.path.join(spot_dir, f"hero.{ext}")
-    with open(path, "wb") as fh:
-        fh.write(data)
-
-    return f"{url_prefix.rstrip('/')}/spots/{spot_id}/hero.{ext}"
+        if existing_ext != ext:
+            storage.delete(f"spots/{spot_id}/hero.{existing_ext}", media_dir=media_dir)
+    return storage.put(
+        f"spots/{spot_id}/hero.{ext}", data, ext,
+        media_dir=media_dir, url_prefix=url_prefix,
+    )
 
 
 def save_region_hero_image(
@@ -155,18 +151,14 @@ def save_region_hero_image(
     """Write a region hero to ``{media_dir}/regions/{region_id}/hero.{ext}``.
 
     Mirrors :func:`save_hero_image` (a region has one hero); clears a stale
-    other-extension file so a re-upload can't leave two behind.
-    """
-    region_dir = os.path.join(media_dir, "regions", str(region_id))
-    os.makedirs(region_dir, exist_ok=True)
+    other-extension file so a re-upload can't leave two behind."""
     for existing_ext in _ALL_HERO_EXTS:
-        stale = os.path.join(region_dir, f"hero.{existing_ext}")
-        if existing_ext != ext and os.path.exists(stale):
-            os.remove(stale)
-    path = os.path.join(region_dir, f"hero.{ext}")
-    with open(path, "wb") as fh:
-        fh.write(data)
-    return f"{url_prefix.rstrip('/')}/regions/{region_id}/hero.{ext}"
+        if existing_ext != ext:
+            storage.delete(f"regions/{region_id}/hero.{existing_ext}", media_dir=media_dir)
+    return storage.put(
+        f"regions/{region_id}/hero.{ext}", data, ext,
+        media_dir=media_dir, url_prefix=url_prefix,
+    )
 
 
 def _read_image(data: bytes) -> tuple[int, int, str]:
@@ -211,11 +203,8 @@ def save_spot_image(
     """Store a community image at ``{media_dir}/spots/{spot_id}/img/{image_id}.{ext}``.
 
     Unlike the single hero, a spot has many of these, so each keeps its own id in
-    the filename. Returns the root-relative public URL.
-    """
-    img_dir = os.path.join(media_dir, "spots", str(spot_id), "img")
-    os.makedirs(img_dir, exist_ok=True)
-    path = os.path.join(img_dir, f"{image_id}.{ext}")
-    with open(path, "wb") as fh:
-        fh.write(data)
-    return f"{url_prefix.rstrip('/')}/spots/{spot_id}/img/{image_id}.{ext}"
+    the filename. Returns the public URL (root-relative local / absolute Blob)."""
+    return storage.put(
+        f"spots/{spot_id}/img/{image_id}.{ext}", data, ext,
+        media_dir=media_dir, url_prefix=url_prefix,
+    )

@@ -68,13 +68,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve uploaded media (hero images) from disk at the configured URL prefix.
-os.makedirs(settings.media_dir, exist_ok=True)
-app.mount(
-    settings.media_url_prefix,
-    StaticFiles(directory=settings.media_dir),
-    name="media",
-)
+# Serve uploaded media (hero images) from disk at the configured URL prefix —
+# ONLY in local mode. With media_backend="blob" images live in Vercel Blob and
+# are referenced by absolute URLs, and the serverless filesystem is read-only, so
+# creating a dir / mounting StaticFiles here would crash the app at import.
+if settings.media_backend == "local":
+    os.makedirs(settings.media_dir, exist_ok=True)
+    app.mount(
+        settings.media_url_prefix,
+        StaticFiles(directory=settings.media_dir),
+        name="media",
+    )
 
 app.include_router(auth.router)
 app.include_router(spots.router)

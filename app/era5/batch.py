@@ -157,7 +157,9 @@ def process_spot(
     if not request_id:
         return "fail", f"job {job.id} has no cds_request_id (status={job.status})"
 
-    job = cds.poll_cds_job(request_id, db=db, client=client, raw_dir=raw_dir)
+    job = cds.poll_cds_job(
+        request_id, db=db, client=client, raw_dir=raw_dir, spot_id=spot.id
+    )
     if job.raw_path is None:
         return "fail", f"no raw extract yet (job status={job.status})"
 

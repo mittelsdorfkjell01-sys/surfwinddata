@@ -164,6 +164,39 @@ def not_live_gaps(db: Session, *, limit: int = 50) -> list[dict[str, Any]]:
     return out
 
 
+def draft_spots(db: Session, *, limit: int = 100) -> list[dict[str, Any]]:
+    """Draft spots (the 'Entwürfe' column), each with its readiness gaps.
+
+    Incomplete uploads are saved as drafts (create_spot never blocks on missing
+    parts), so this is the draft pipeline — every entry carries its open points
+    (``gaps``) so the dashboard can show 'x offene Punkte' per draft and link
+    straight into the editor to complete it later."""
+    rules = _required_rules(db)
+    jobs = _latest_job_status_map(db)
+    spots = db.scalars(
+        select(Spot)
+        .where(Spot.status == "draft")
+        .order_by(Spot.updated_at.desc())
+        .limit(limit)
+    ).all()
+    out: list[dict[str, Any]] = []
+    for s in spots:
+        result = build_checklist(s, rules, job_status=jobs.get(s.id))
+        out.append(
+            {
+                "id": str(s.id),
+                "name": s.name,
+                "slug": s.slug,
+                "status": s.status,
+                "region_id": str(s.region_id),
+                "gaps": result["gaps"],
+                "ready": result["ready"],
+                "updated_at": s.updated_at.isoformat(),
+            }
+        )
+    return out
+
+
 _AUDIT_NOISE = {"auto", "from", "to"}
 
 
@@ -233,6 +266,7 @@ def overview(db: Session) -> dict[str, Any]:
         "regions": regions_count,
         "readiness_open": len(open_gaps),
         "not_live": open_gaps[:20],
+        "drafts": draft_spots(db, limit=100),
         "recent": recent_spots(db),
         "review": review_counts(db),
         "team_notes": list_notes(db, limit=12),

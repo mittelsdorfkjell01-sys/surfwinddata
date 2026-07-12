@@ -1,0 +1,25 @@
+# Dependencies for the Vercel serverless function ONLY (the request-serving API).
+# Deliberately a SUBSET of the repo-root requirements.txt to stay under Vercel's
+# 250 MB unzipped function limit:
+#   - pyarrow  -> excluded (only the OFFLINE climatology batch reads/writes
+#     Parquet; rawfile.py imports it lazily, so the request path never needs it).
+#   - uvicorn  -> excluded (Vercel's Python runtime serves the ASGI app).
+#   - alembic  -> excluded (migrations run offline against the managed DB).
+#   - pytest   -> excluded (tests don't run in the function).
+# Keep this in sync with the runtime imports of app/ (minus the above).
+
+fastapi==0.115.6
+sqlalchemy==2.0.36
+geoalchemy2==0.16.0
+psycopg[binary]==3.2.3
+pydantic==2.10.4
+pydantic-settings==2.7.0
+redis==5.2.1
+shapely==2.0.6
+httpx==0.28.1
+python-multipart==0.0.20
+pillow==11.1.0
+pillow-avif-plugin==1.5.5
+bcrypt==5.0.0
+PyJWT==2.10.1
+numpy==2.4.6

@@ -629,6 +629,17 @@ export interface NotLiveSpot {
   gaps: string[];
 }
 
+export interface DraftSpot {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  region_id: string;
+  gaps: string[];
+  ready: boolean;
+  updated_at: string;
+}
+
 export interface LastChange {
   action: string;
   fields: string[];
@@ -657,6 +668,7 @@ export interface AdminOverview {
   regions: number;
   readiness_open: number;
   not_live: NotLiveSpot[];
+  drafts: DraftSpot[];
   recent: RecentSpot[];
   review: Record<string, number>;
   team_notes: TeamNote[];

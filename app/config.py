@@ -33,6 +33,19 @@ class Settings(BaseSettings):
     media_dir: str = "data/media"
     media_url_prefix: str = "/media"
 
+    # Where uploaded images live: "local" writes to media_dir on disk (dev / VPS
+    # with a persistent volume); "blob" uploads to Vercel Blob and stores the
+    # returned public https URL (serverless hosts whose filesystem is ephemeral).
+    media_backend: str = "local"  # local | blob
+    # Vercel Blob read/write token (required when media_backend="blob").
+    blob_read_write_token: str | None = None
+
+    # Serverless DB pooling: on a short-lived serverless invocation, holding a
+    # SQLAlchemy pool is wrong (connections outlive the function / exhaust the
+    # server). True => NullPool (open+close per checkout); pair it with a
+    # server-side pooler (e.g. Neon's pooled endpoint). False => normal pool.
+    db_serverless: bool = False
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, v):

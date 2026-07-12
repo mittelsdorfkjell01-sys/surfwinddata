@@ -13,15 +13,23 @@ from __future__ import annotations
 import os
 
 import numpy as np
-import pyarrow as pa
-import pyarrow.parquet as pq
 
 from app.era5 import seriesutil
 from app.era5.bins import VARS
 
+# NOTE: pyarrow is imported lazily inside the two functions below, not at module
+# top. Parquet raw extracts are only ever read/written by the OFFLINE climatology
+# batch — never on the request path. Keeping the (large ~130 MB) pyarrow import
+# lazy lets the request-serving app import this module (and the whole app.era5
+# chain) without pulling pyarrow, so it can be excluded from a size-limited
+# serverless bundle (e.g. Vercel's 250 MB function limit).
+
 
 def write_raw(path: str, series: dict) -> str:
     """Persist an hourly ``series`` to ``path`` as Parquet. Returns ``path``."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     times = seriesutil.as_datetime64(series["time"])
     columns = {"time": pa.array(times.astype("datetime64[s]"))}
@@ -36,6 +44,8 @@ def write_raw(path: str, series: dict) -> str:
 
 def read_raw(path: str) -> dict:
     """Load an hourly series previously written by :func:`write_raw`."""
+    import pyarrow.parquet as pq
+
     table = pq.read_table(path)
     data = table.to_pydict()
     series: dict = {"time": np.array(data["time"], dtype="datetime64[s]")}
