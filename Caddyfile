@@ -1,5 +1,6 @@
-# Reverse proxy + automatic HTTPS for the API. The frontend is hosted separately
-# (static host), so this domain serves only the API (e.g. api.example.com).
+# Single-domain deploy: the SPA is served at / and the API + uploaded media under
+# /api — frontend and backend share ONE origin (${DOMAIN}). That keeps the admin
+# login session cookie first-party/same-site (plain SameSite=Lax; no CORS needed).
 #
 # ${DOMAIN} is read from .env.prod. Caddy provisions a Let's Encrypt certificate
 # automatically ON THE FIRST REQUEST — this REQUIRES a DNS A-record for ${DOMAIN}
@@ -8,5 +9,18 @@
 # issuance fails and Caddy serves nothing.
 {$DOMAIN} {
 	encode zstd gzip
-	reverse_proxy app:8000
+
+	# API + uploaded media -> backend. handle_path strips the /api prefix, so the
+	# app still sees its normal routes (/spots, /auth/login, /admin/*, /media/*).
+	handle_path /api/* {
+		reverse_proxy app:8000
+	}
+
+	# Everything else is the static single-page app (client-side routing: unknown
+	# paths fall back to index.html).
+	handle {
+		root * /srv/www
+		try_files {path} /index.html
+		file_server
+	}
 }
