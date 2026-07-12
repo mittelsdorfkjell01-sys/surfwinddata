@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { MapIcon, MenuIcon, UserIcon } from "../lib/icons";
+import { INCLUDE_ADMIN } from "../lib/target";
 
 /**
  * Landing-only top bar for the "surfwind data" design (Frame_1 / Frame_5).
@@ -74,12 +75,14 @@ export default function LandingHeader() {
               <span className="hidden sm:inline">Karte</span>
             </Link>
 
-            <Link
-              to="/admin/spot/new"
-              className="hidden text-[16px] font-medium text-brand-teal transition-colors hover:text-brand-teal-dark sm:block"
-            >
-              Füge Spots hinzu
-            </Link>
+            {INCLUDE_ADMIN && (
+              <Link
+                to="/admin/spot/new"
+                className="hidden text-[16px] font-medium text-brand-teal transition-colors hover:text-brand-teal-dark sm:block"
+              >
+                Füge Spots hinzu
+              </Link>
+            )}
 
             <div ref={ref} className="relative">
               <button

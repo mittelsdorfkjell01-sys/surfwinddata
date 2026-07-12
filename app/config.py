@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     api_title: str = "Surfwinddate API"
     api_debug: bool = True
 
+    # Whether this deployment exposes the back office (auth + /admin* routers) and
+    # runs the admin bootstrap. True on the admin deployment (kjellmittelsdorf.de);
+    # set ENABLE_ADMIN_API=false on the public deployment (surfwinddata.com) so its
+    # origin serves only the public + community endpoints — no /auth, no /admin.
+    enable_admin_api: bool = True
+
     # Browser origins allowed to call the API (CORS). The Vite dev server runs on
     # 5173 by default. NoDecode keeps pydantic-settings from JSON-parsing the env
     # var so the validator below can accept a comma-separated list too.
