@@ -170,9 +170,12 @@ def best_regions(
 ) -> dict:
     """Rank regions over a time window (travel default when time is open too)."""
     window = _season_window(month, weeks)
-    return service.best_regions_for_window(
-        window, db=db, sport=sport, profile=_profile(level), limit=limit
-    )
+    try:
+        return service.best_regions_for_window(
+            window, db=db, sport=sport, profile=_profile(level), limit=limit
+        )
+    except KeyError:
+        raise HTTPException(status_code=422, detail=f"Unknown sport {sport!r}")
 
 
 @router.get("/areas/best-weeks", tags=["open-axes"])

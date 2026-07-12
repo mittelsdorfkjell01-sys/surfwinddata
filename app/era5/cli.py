@@ -110,6 +110,13 @@ def _cmd_recompute(args) -> None:
         db.close()
 
 
+def _cmd_batch(args) -> None:
+    from app.era5.batch import run_batch
+
+    report = run_batch(args)
+    raise SystemExit(1 if report.fail else 0)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="app.era5.cli", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -133,6 +140,12 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("spot", help="spot id or slug")
     p.add_argument("--dump", action="store_true", help="print week 1 as JSON")
     p.set_defaults(func=_cmd_recompute)
+
+    p = sub.add_parser("batch", help="orchestrate the pipeline over many spots")
+    from app.era5.batch import add_batch_arguments
+
+    add_batch_arguments(p)
+    p.set_defaults(func=_cmd_batch)
 
     args = parser.parse_args(argv)
     args.func(args)

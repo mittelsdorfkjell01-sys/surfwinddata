@@ -57,14 +57,48 @@ class Settings(BaseSettings):
     # TTL (seconds) for cached Open-Meteo live/forecast responses (30-60 min band).
     live_cache_ttl: int = 1800
 
+    # When true, a queued ERA5 job is processed automatically in the background
+    # (on spot create and on the "ERA5 anstoßen" trigger) instead of waiting for
+    # the batch runner. Off by default so tests stay deterministic; enable it in
+    # a running deployment (ERA5_AUTOPROCESS=true).
+    era5_autoprocess: bool = False
+
     # Optional comma-separated override of the independent global models whose
     # disagreement forms the Sprint 18 consensus band (default: the DWD/NOAA/ECMWF
     # trio in app.live.models.CONSENSUS_GLOBAL_MODELS). None => use the default.
     live_consensus_models: str | None = None
 
     # Optional shared key guarding the /admin endpoints (X-Admin-Key header).
-    # None => admin is unprotected (no auth yet; see Sprint 8 notes).
+    # Since Sprint A this is only a **break-glass** fallback: when set, a correct
+    # X-Admin-Key is accepted as an emergency admin (actor="break-glass"). The
+    # regular path is the cookie session below. Default None => break-glass off.
     admin_key: str | None = None
+
+    # --- Admin auth (Sprint A) ---------------------------------------------
+    # Secret used to sign the session JWT. MUST be overridden in production; the
+    # dev default only keeps local runs and tests working out of the box.
+    jwt_secret: str = "dev-insecure-change-me"
+    # Session lifetime (hours) — short-lived; re-login required after expiry.
+    jwt_ttl_hours: int = 12
+    # httpOnly cookie carrying the session JWT.
+    auth_cookie_name: str = "swd_session"
+    # Set True behind HTTPS in production so the cookie is only sent over TLS.
+    cookie_secure: bool = False
+    # SameSite policy for the session cookie ("lax" is right for a same-site SPA).
+    cookie_samesite: str = "lax"
+
+    # First-run bootstrap: if no AdminUser exists at startup and both are set, an
+    # admin is created from these. Never hard-code a password default.
+    admin_bootstrap_email: str | None = None
+    admin_bootstrap_password: str | None = None
+
+    # Contact address surfaced by the take-down / image-report flow (Sprint C).
+    takedown_contact_email: str | None = None
+
+    # Comma-separated extra terms that flag a tip/rating for review (on top of the
+    # built-in spam/URL indicators). Content still publishes; it just shows up
+    # flagged in the review panel. Case-insensitive substring match.
+    banned_words: str = ""
 
 
 @lru_cache

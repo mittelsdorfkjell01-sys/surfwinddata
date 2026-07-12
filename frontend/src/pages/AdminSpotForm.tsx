@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import ImageUpload from "../components/ImageUpload";
-import AdminKeyBar from "../components/AdminKeyBar";
+import ImageFocalEditor from "../components/ImageFocalEditor";
+import SpotOpsPanel from "../components/SpotOpsPanel";
+import SpotMapEditor, { type MapView } from "../components/SpotMapEditor";
 import { ErrorBanner } from "../components/AsyncStates";
 import { useRegions } from "../lib/hooks";
 import {
   createSpot,
   getSpot,
   getReadiness,
+  setSpotImageFocal,
   updateSpot,
   uploadHeroImage,
   ApiError,
   type FacilityKind,
+  type ImageRecord,
   type Readiness,
   type SpotCreateBody,
 } from "../lib/api";
@@ -107,6 +111,7 @@ export default function AdminSpotForm() {
   const [description, setDescription] = useState("");
   const [lat, setLat] = useState("");
   const [lon, setLon] = useState("");
+  const [mapView, setMapView] = useState<MapView | null>(null);
   const [sports, setSports] = useState<string[]>([]);
   const [level, setLevel] = useState("");
   const [waterCharacter, setWaterCharacter] = useState("");
@@ -126,6 +131,7 @@ export default function AdminSpotForm() {
       ) as Record<FacilityKind, { state: Availability; note: string }>
   );
   const [heroFile, setHeroFile] = useState<File | null>(null);
+  const [currentImage, setCurrentImage] = useState<ImageRecord | null>(null);
   const [credit, setCredit] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
@@ -150,9 +156,14 @@ export default function AdminSpotForm() {
         setSlugTouched(true);
         setRegionId(s.region_id);
         setDescription((s.editorial?.description as string) ?? "");
+        setCurrentImage((s.image as ImageRecord | null) ?? null);
         if (s.location) {
           setLat(String(s.location.lat));
           setLon(String(s.location.lon));
+        }
+        const mv = s.editorial?.map_view;
+        if (mv && Array.isArray(mv.center) && typeof mv.zoom === "number") {
+          setMapView({ center: mv.center as [number, number], zoom: mv.zoom });
         }
         setSports(s.sports ?? []);
         setLevel(s.level ?? "");
@@ -198,6 +209,7 @@ export default function AdminSpotForm() {
     if (windDirMin !== "" && windDirMax !== "")
       ed.usable_wind_directions = { min: Number(windDirMin), max: Number(windDirMax) };
     if (isSurf && tide.trim()) ed.tide = tide.trim();
+    if (mapView) ed.map_view = mapView; // preview frame for the spot's flow map
     return ed;
   };
 
@@ -290,82 +302,28 @@ export default function AdminSpotForm() {
 
   if (loadingExisting) {
     return (
-      <div className="min-h-screen bg-white">
-        <div className="mx-auto max-w-[820px] px-4 py-10 sm:px-8">
-          <div className="h-8 w-64 animate-pulse rounded bg-line" />
-        </div>
+      <div className="mx-auto max-w-[820px]">
+        <div className="h-8 w-64 animate-pulse rounded bg-line" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <header className="border-b border-line">
-        <div className="mx-auto flex max-w-[820px] items-center justify-between px-4 py-4 sm:px-8">
-          <Link to="/" className="text-xl font-bold tracking-tight text-navy">
-            SpotInfo
-          </Link>
-          <span className="text-[13px] font-medium text-muted">
-            Admin · {isEdit ? "Spot bearbeiten" : "Neuer Spot"}
-          </span>
-        </div>
-      </header>
+    <div className="mx-auto max-w-[1100px]">
+      <h1 className="text-[24px] font-semibold text-navy">
+        {isEdit ? "Spot bearbeiten" : "Neuen Spot anlegen"}
+      </h1>
+      <p className="mt-2 text-[15px] text-muted">
+        Alle redaktionellen Felder. Live-Wetter und Klimatologie werden separat
+        über die Datenfeeds gezogen.
+      </p>
 
-      <main className="mx-auto max-w-[820px] px-4 py-10 sm:px-8">
-        <h1 className="text-[24px] font-semibold text-navy">
-          {isEdit ? "Spot bearbeiten" : "Neuen Spot anlegen"}
-        </h1>
-        <p className="mt-2 text-[15px] text-muted">
-          Alle redaktionellen Felder. Live-Wetter und Klimatologie werden separat
-          über die Datenfeeds gezogen.
-        </p>
-
-        <div className="mt-6">
-          <AdminKeyBar />
-        </div>
-
-        {savedId && readiness && (
-          <div className="mt-6 rounded-2xl bg-brand-green/10 p-5">
-            <p className="text-[14px] font-semibold text-brand-green">
-              ✓ Gespeichert.{" "}
-              {readiness.ready
-                ? "Der Spot erfüllt alle Pflichtfelder und kann live gehen."
-                : "Für die Veröffentlichung fehlen noch Angaben:"}
-            </p>
-            {!readiness.ready && (
-              <ul className="mt-2 list-inside list-disc text-[13px] text-navy/80">
-                {readiness.gaps.map((g) => (
-                  <li key={g}>{g}</li>
-                ))}
-              </ul>
-            )}
-            <div className="mt-4 flex gap-3">
-              <Link
-                to={`/spot/${savedId}`}
-                className="rounded-lg bg-navy px-3 py-1.5 text-[13px] font-medium text-white hover:bg-navy-dark"
-              >
-                Zur Spot-Seite
-              </Link>
-              {!isEdit && (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/admin/spot/${savedId}/edit`)}
-                  className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-navy ring-1 ring-navy/20 hover:ring-navy/40"
-                >
-                  Weiter bearbeiten
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {error && (
-          <div className="mt-6">
-            <ErrorBanner message={error} />
-          </div>
-        )}
-
-        <form onSubmit={onSubmit} className="mt-8 space-y-8">
+      <form
+        onSubmit={onSubmit}
+        className="mt-6 lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start lg:gap-8"
+      >
+        {/* Left column: editorial fields (scrolls) */}
+        <div className="min-w-0 space-y-8">
           {/* Basisdaten */}
           <section className="space-y-4">
             <h2 className="text-[15px] font-semibold text-navy">Basisdaten</h2>
@@ -424,6 +382,27 @@ export default function AdminSpotForm() {
                   placeholder="10.22"
                 />
               </Field>
+            </div>
+            <div>
+              <span className="text-[13px] font-medium text-navy">
+                Position &amp; Karten-Ausschnitt
+              </span>
+              <div className="mt-1.5">
+                <SpotMapEditor
+                  lat={lat === "" ? null : Number(lat)}
+                  lon={lon === "" ? null : Number(lon)}
+                  mapView={mapView}
+                  onPositionChange={(la, lo) => {
+                    setLat(String(la));
+                    setLon(String(lo));
+                    setFieldErrors((prev) => {
+                      const { lat: _l, lon: _o, ...rest } = prev;
+                      return rest;
+                    });
+                  }}
+                  onViewChange={setMapView}
+                />
+              </div>
             </div>
             <Field label="Beschreibung">
               <textarea
@@ -619,6 +598,26 @@ export default function AdminSpotForm() {
           {/* Hero-Bild */}
           <section>
             <h2 className="text-[15px] font-semibold text-navy">Header-Bild</h2>
+            {currentImage?.url && (
+              <div className="mt-3">
+                <p className="text-[13px] font-medium text-navy">Ausschnitt wählen</p>
+                <div className="mt-1.5 max-w-[560px]">
+                  <ImageFocalEditor
+                    url={currentImage.url}
+                    focal={currentImage.focal}
+                    aspect="21 / 9"
+                    onSave={async (x, y) => {
+                      if (!id) return;
+                      const spot = await setSpotImageFocal(id, x, y);
+                      setCurrentImage((spot.image as ImageRecord | null) ?? null);
+                    }}
+                  />
+                </div>
+                <p className="mt-2 text-[12px] text-muted">
+                  Neues Bild ersetzt das aktuelle:
+                </p>
+              </div>
+            )}
             <div className="mt-3">
               <ImageUpload onAccept={setHeroFile} />
             </div>
@@ -636,11 +635,54 @@ export default function AdminSpotForm() {
             )}
           </section>
 
-          <div className="flex items-center gap-3 border-t border-line pt-6">
+        </div>
+
+        {/* Right column: sticky actions — stay put while the form scrolls */}
+        <aside className="mt-8 space-y-4 lg:mt-0 lg:sticky lg:top-6">
+          {isEdit && id && <SpotOpsPanel spotId={id} />}
+
+          {savedId && readiness && (
+            <div className="rounded-2xl bg-brand-green/10 p-4">
+              <p className="text-[14px] font-semibold text-brand-green">
+                ✓ Gespeichert.{" "}
+                {readiness.ready
+                  ? "Der Spot erfüllt alle Pflichtfelder und kann live gehen."
+                  : "Für die Veröffentlichung fehlen noch Angaben:"}
+              </p>
+              {!readiness.ready && (
+                <ul className="mt-2 list-inside list-disc text-[13px] text-navy/80">
+                  {readiness.gaps.map((g) => (
+                    <li key={g}>{g}</li>
+                  ))}
+                </ul>
+              )}
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link
+                  to={`/spot/${savedId}`}
+                  className="rounded-lg bg-navy px-3 py-1.5 text-[13px] font-medium text-white hover:bg-navy-dark"
+                >
+                  Zur Spot-Seite
+                </Link>
+                {!isEdit && (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/admin/spot/${savedId}/edit`)}
+                    className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-navy ring-1 ring-navy/20 hover:ring-navy/40"
+                  >
+                    Weiter bearbeiten
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {error && <ErrorBanner message={error} />}
+
+          <div className="rounded-2xl border border-line bg-white p-4">
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-xl bg-navy px-5 py-2.5 text-[14px] font-medium text-white hover:bg-navy-dark disabled:opacity-50"
+              className="w-full rounded-xl bg-navy px-5 py-2.5 text-[14px] font-medium text-white hover:bg-navy-dark disabled:opacity-50"
             >
               {submitting
                 ? "Speichern …"
@@ -648,12 +690,24 @@ export default function AdminSpotForm() {
                 ? "Änderungen speichern"
                 : "Spot anlegen"}
             </button>
-            <Link to="/" className="text-[14px] text-muted hover:text-navy">
-              Abbrechen
-            </Link>
+            <div className="mt-3 flex items-center justify-between text-[13px]">
+              <Link to="/" className="text-muted hover:text-navy">
+                Abbrechen
+              </Link>
+              {isEdit && id && (
+                <a
+                  href={`/spot/${id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-navy hover:underline"
+                >
+                  Vorschau ↗
+                </a>
+              )}
+            </div>
           </div>
-        </form>
-      </main>
+        </aside>
+      </form>
     </div>
   );
 }

@@ -115,5 +115,27 @@ class RegionDefaultsUpdate(BaseModel):
     defaults: dict[str, Any]
 
 
+class RegionUpdate(BaseModel):
+    """Partial region edit: only the fields sent are applied."""
+
+    name: str | None = None
+    description: str | None = None
+    defaults: dict[str, Any] | None = None
+    season: dict[str, Any] | None = None
+
+    def to_data(self) -> dict:
+        return self.model_dump(exclude_unset=True)
+
+
+class RegionImageRequest(BaseModel):
+    url: str
+    source: str = "manual"
+    license: str = "own"
+    credit: str
+
+    def to_image(self) -> dict:
+        return self.model_dump()
+
+
 class AssignRegionRequest(BaseModel):
     region_id: uuid.UUID

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -23,6 +23,11 @@ const SPORT_UI: Record<string, string> = {
   wing: "Wing",
 };
 
+// Fixed panel height so every segment's dropdown is exactly the same size (no
+// jump when switching fields); taller content (e.g. the "Wohin?" list) scrolls
+// inside. Capped at 70vh on short screens via maxHeight.
+const PANEL_H = 400;
+
 /**
  * Airbnb-style 3-segment search (Frame_2–5). The bar stays crisp above a
  * page-dimming scrim; the active panel opens below it. Scrim + panel are
@@ -37,11 +42,7 @@ export default function SearchBar() {
   const barRef = useRef<HTMLDivElement>(null);
   const whereRef = useRef<HTMLDivElement>(null);
   const whereInput = useRef<HTMLInputElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
-  // Measured content height so the panel can animate its height (real px, not a
-  // distorting scale transform) as we switch fields or the content reflows.
-  const [panelH, setPanelH] = useState<number | null>(null);
 
   // Panel geometry: "Wann?" needs the full bar width for its two-month calendar;
   // "Wohin?" and "Welche?" only span their own field.
@@ -52,32 +53,22 @@ export default function SearchBar() {
   };
   const close = () => setOpen(null);
 
-  // Track the open panel's natural height (capped at 70vh) so height changes —
-  // between segments and when content reflows (typing, reset row) — animate.
-  useLayoutEffect(() => {
-    if (!open) return;
-    const el = contentRef.current;
-    if (!el) return;
-    const measure = () => setPanelH(Math.min(el.offsetHeight, window.innerHeight * 0.7));
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [open]);
-
   // While open: Esc closes, and scroll/resize collapse the panel (positions are
   // captured at open time).
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    // Close when the *page* scrolls (the panel is fixed-positioned from a rect
+    // captured at open time). No capture, so scrolling *inside* the panel's own
+    // list (e.g. the "Wohin?" results) does not bubble here and keep it open.
     const onScroll = () => close();
     const onResize = () => close();
     window.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("scroll", onScroll);
     window.addEventListener("resize", onResize);
     return () => {
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onResize);
     };
   }, [open]);
@@ -89,7 +80,18 @@ export default function SearchBar() {
 
   const pickWhere = (pick: WherePick) => {
     addRecent({ label: pick.label, kind: pick.kind, id: pick.id, country: pick.country });
-    setVal((v) => ({ ...v, whereSel: { label: pick.label, kind: pick.kind, id: pick.id }, whereText: pick.label }));
+    setVal((v) => ({
+      ...v,
+      whereSel: { label: pick.label, kind: pick.kind, id: pick.id },
+      whereText: pick.label,
+      whereOpen: false,
+    }));
+    close();
+  };
+
+  // Open place axis ("unentschlossen").
+  const openWherePlace = () => {
+    setVal((v) => ({ ...v, whereOpen: true, whereSel: null, whereText: "unentschlossen" }));
     close();
   };
 
@@ -122,7 +124,7 @@ export default function SearchBar() {
               value={val.whereText}
               onFocus={() => openSeg("where", whereRef.current)}
               onChange={(e) =>
-                setVal((v) => ({ ...v, whereText: e.target.value, whereSel: null }))
+                setVal((v) => ({ ...v, whereText: e.target.value, whereSel: null, whereOpen: false }))
               }
               placeholder="Region oder Spot suchen"
               aria-label="Wohin?"
@@ -190,6 +192,7 @@ export default function SearchBar() {
                   top: rect.bottom + 12,
                   left: rect.left,
                   width: rect.width,
+                  height: PANEL_H,
                 }}
                 animate={{
                   opacity: 1,
@@ -197,7 +200,7 @@ export default function SearchBar() {
                   top: rect.bottom + 12,
                   left: rect.left,
                   width: rect.width,
-                  ...(panelH != null ? { height: panelH } : {}),
+                  height: PANEL_H,
                 }}
                 exit={{ opacity: 0, y: reduce ? 0 : -8 }}
                 transition={
@@ -213,17 +216,19 @@ export default function SearchBar() {
                         opacity: { duration: 0.18, ease: "easeOut" },
                       }
                 }
-                style={{ position: "fixed", zIndex: 1150 }}
+                style={{ position: "fixed", zIndex: 1150, maxHeight: "70vh" }}
                 className="overflow-hidden rounded-3xl bg-white shadow-card"
               >
-                <div ref={contentRef} className="max-h-[70vh] overflow-auto p-6">
+                <div className="h-full overflow-auto p-6">
                   <motion.div
                     key={open}
                     initial={reduce ? false : { opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.18, ease: "easeOut" }}
                   >
-                    {open === "where" && <SearchWhere query={val.whereText} onPick={pickWhere} />}
+                    {open === "where" && (
+                      <SearchWhere query={val.whereText} onPick={pickWhere} onOpen={openWherePlace} />
+                    )}
                     {open === "when" && (
                       <SearchWhen
                         value={val.when}
@@ -234,6 +239,10 @@ export default function SearchBar() {
                       <SearchWhich
                         value={val.which}
                         onChange={(which) => setVal((v) => ({ ...v, which }))}
+                        disciplines={val.disciplines}
+                        onDisciplinesChange={(disciplines) =>
+                          setVal((v) => ({ ...v, disciplines }))
+                        }
                       />
                     )}
                   </motion.div>

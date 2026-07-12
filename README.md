@@ -13,9 +13,10 @@ adds the runtime **Open-Meteo live + forecast path** (see
 **similarity search** (see [Similarity](#similarity-sprint-7)). **Sprint 8** adds
 the **admin / data-maintenance** write workflow (see [Admin](#admin-sprint-8)).
 
-> **Out of scope so far:** watches & notifications (Sprint 9), and authentication
-> (a later app phase — admin is unprotected by default, optionally behind a shared
-> `ADMIN_KEY`). The `watches` and `notifications` tables exist but are not yet
+> **Out of scope so far:** watches & notifications (Sprint 9). Admin
+> authentication now exists (cookie sessions + roles, see
+> [Admin auth & accounts](#admin-auth--accounts-sprint-a)); end-user accounts are
+> still future work. The `watches` and `notifications` tables exist but are not yet
 > populated or exposed. The climatology pipeline and the region-season aggregate
 > are run **manually** (CLI/function); admin spot-creation triggers an ERA5 job but
 > climatology still derives offline. The live path returns **raw values only** —
@@ -250,6 +251,35 @@ python -m app.era5.cli build tarifa-los-lances
 # 3. later, re-derive from the stored raw file without re-querying CDS
 python -m app.era5.cli recompute tarifa-los-lances --dump
 ```
+
+### Bulk: all spots at once (`app.era5.batch`)
+
+The per-spot commands above are fine for one spot; to populate the whole
+catalogue use the **batch orchestrator**, which chains `request → poll → build`
+over a selection of spots. It only *orchestrates* the tested per-spot functions —
+it never re-implements the derivation and never touches `spots.overrides`.
+
+```bash
+python -m app.era5.batch                       # all spots, skip those already done
+python -m app.era5.batch --status published     # only the live catalogue
+python -m app.era5.batch --region sardinia      # one region (repeatable)
+python -m app.era5.batch --slug tarifa-los-lances --force   # recompute one
+python -m app.era5.batch --dry-run              # list compute/skip, no network
+# equivalently: python -m app.era5.cli batch ...
+```
+
+- **Idempotent** — spots that already carry climatology are skipped; `--force`
+  recomputes and, when a cached raw Parquet exists, does so **without any network
+  fetch** (`recompute_climatology`).
+- **Net-resilient** — retries with backoff on transient HTTP errors (429/5xx/
+  timeouts, `--retries`), a `--sleep` pause between spots, and per-spot isolation:
+  one failing spot is logged and marked `failed`, the batch continues.
+- **Reportable** — one `ok`/`skip`/`fail` line per spot plus a summary; the process
+  exits non-zero if any spot failed (for automation). Wave-history markers
+  (`wave_source`/`wave_window`/`wave_note`) are carried through unchanged.
+- **Needs outbound access** to `archive-api.open-meteo.com` (wind/temp) and
+  `marine-api.open-meteo.com` (waves). Run it where those are reachable (e.g. the
+  VPS). Verify the result with `python -m scripts.verify_content`.
 
 ### Where the raw data lives
 
@@ -583,9 +613,9 @@ climatology curves.
 The write workflow for curators — create spots/regions, maintain editorial text,
 override auto-computed values **with provenance**, manage image rights and publish
 a spot only once it is complete. Pure API/logic, no UI. Code in
-[`app/admin/`](app/admin/); endpoints under `/admin` (see the API table). There is
-no auth yet: `/admin` is open unless `ADMIN_KEY` is set, then it requires the
-`X-Admin-Key` header.
+[`app/admin/`](app/admin/); endpoints under `/admin` (see the API table). Since
+**Sprint A** every `/admin/*` route requires a logged-in admin/curator session
+(cookie) — see [Admin auth & accounts](#admin-auth--accounts-sprint-a) below.
 
 | Function (`app.admin.*`)                  | Responsibility                              |
 | ----------------------------------------- | ------------------------------------------- |
@@ -635,6 +665,129 @@ it. Because overrides live in their own column, **`recompute_climatology` (Sprin
 rewrites `spots.climatology` but never touches `spots.overrides`** — a pinned value
 survives a re-derivation. (There is intentionally no `wind_danger`/`hazards`
 field; unusable conditions are simply a `nein`.)
+
+## Admin auth & accounts (Sprint A)
+
+Real login replaces the shared `X-Admin-Key`. Operators sign in with an email +
+password; the server sets a short-lived **JWT in an httpOnly cookie**
+(`swd_session`, 12 h). Two roles: **`admin`** (everything, incl. user management)
+and **`curator`** (curate/moderate, no user management). The signed-in user's
+email is the **`actor`** recorded in every audit row.
+
+- Model [`AdminUser`](app/models/admin_user.py) (migration `0004`), passwords
+  hashed with **bcrypt** ([`app/auth/security.py`](app/auth/security.py)).
+- Guards in [`app/auth/deps.py`](app/auth/deps.py): `current_user`,
+  `require_role("admin"[, "curator"])`, `get_actor`. The `/admin` router requires
+  `admin` **or** `curator`; `/admin/users` requires `admin`.
+- **Bootstrap:** on startup, if no admin exists and `ADMIN_BOOTSTRAP_EMAIL` /
+  `ADMIN_BOOTSTRAP_PASSWORD` are set, the first admin is created (idempotent).
+- **Break-glass:** an optional `ADMIN_KEY` (unset by default) still lets a correct
+  `X-Admin-Key` header through as `actor="break-glass"`, for emergencies only.
+
+New endpoints:
+
+| Method + path                       | Role    | Purpose                              |
+| ----------------------------------- | ------- | ------------------------------------ |
+| `POST /auth/login`                  | public  | set session cookie, returns the user |
+| `POST /auth/logout`                 | any     | clear the session cookie             |
+| `GET  /auth/me`                     | session | current user (401 if signed out)     |
+| `GET/POST /admin/users`             | admin   | list / create operator accounts      |
+| `PATCH /admin/users/{id}`           | admin   | change role / active / display name  |
+| `POST /admin/users/{id}/password`   | admin   | reset a user's password              |
+
+Frontend: `AuthProvider`/`useAuth` ([`src/lib/auth.tsx`](frontend/src/lib/auth.tsx)),
+`credentials: "include"` on every request, a `/admin/login` page, a `RequireAuth`
+route guard, and an admin-only `/admin/users` screen. The old `AdminKeyBar` is gone.
+
+New env vars (see [`env.prod.example`](env.prod.example)): `JWT_SECRET`,
+`ADMIN_BOOTSTRAP_EMAIL`, `ADMIN_BOOTSTRAP_PASSWORD`, `COOKIE_SECURE`,
+`TAKEDOWN_CONTACT_EMAIL` (+ optional break-glass `ADMIN_KEY`).
+
+## Admin dashboard (Sprint B)
+
+A back-office UI so the operator finds and drives everything without URL-guessing.
+Read-side aggregation in [`app/admin/dashboard.py`](app/admin/dashboard.py) over
+existing tables (no new state); new read endpoints on the `/admin` router:
+
+| Method + path      | Purpose                                                        |
+| ------------------ | -------------------------------------------------------------- |
+| `GET /admin/overview` | KPIs: spot status counts, region count, readiness gaps, recent + not-live lists |
+| `GET /admin/spots`    | filter (`status`,`region_id`,`sport`,`q`) + `sort` + paginate → `{items,total}` |
+| `GET /admin/regions`  | regions with per-status spot counts                         |
+
+Frontend: an [`AdminShell`](frontend/src/components/AdminShell.tsx) layout (sidebar
+nav + user/logout), a dashboard ([`AdminHome`](frontend/src/pages/AdminHome.tsx))
+with status tiles + "not live / readiness open" + recently edited, a filterable
+spots table ([`AdminSpots`](frontend/src/pages/AdminSpots.tsx)) with go-live/ERA5
+row actions, a regions view ([`AdminRegions`](frontend/src/pages/AdminRegions.tsx))
+with create + defaults + stock-image, and `AdminSpotForm` extended with an ops
+panel ([`SpotOpsPanel`](frontend/src/components/SpotOpsPanel.tsx): readiness +
+go-live, ERA5 trigger/status, and a read-only view of active overrides). All admin
+routes are nested under the shell behind `RequireAuth`. No new env vars.
+
+## Community / UGC (Sprint C)
+
+The public write layer: users rate spots, leave local tips, propose new spots, and
+upload images (gallery + hero candidates) — with a versioned image license accepted
+at upload. **No moderation UI yet** (that's Sprint D); status fields are already in
+place so nothing user-submitted goes live unreviewed where it shouldn't. Models in
+[`app/models/ugc.py`](app/models/ugc.py) (migration `0005`), pseudonymous
+(`author_name` + non-public `author_email`, nullable `app_user_id` reserved).
+
+Endpoints in [`app/api/community.py`](app/api/community.py) — all writes are
+rate-limited per IP (Redis, fail-open) with a honeypot field and store a salted
+`ip_hash` (never the raw IP):
+
+| Method + path                    | Purpose                                                   |
+| -------------------------------- | --------------------------------------------------------- |
+| `GET  /community/license`        | versioned upload terms (`v1`) for the consent checkbox     |
+| `POST /spots/{id}/ratings`       | stars(1–5) + skill_level + sport + **conditions** (req)    |
+| `GET  /spots/{id}/ratings`       | published ratings **+ aggregate** (count, avg, Bayesian score) |
+| `POST /spots/{id}/tips` · `GET`  | local tips (published only)                                |
+| `POST /submissions`              | new-spot proposal — validated vs. create schema, stored `pending` (no spot created) |
+| `POST /spots/{id}/images`        | multipart upload; `hero_candidate` must pass HERO_REQ, `gallery` moderate limits; `license_accept` required |
+| `GET  /spots/{id}/images`        | visible gallery (`approved` / `published_hero`)            |
+| `POST /images/{id}/report`       | increments `report_count`, returns the take-down contact   |
+
+`gallery` uploads are post-moderated (visible immediately, reportable);
+`hero_candidate` uploads default to `pending` and await admin approval (Sprint D).
+The rating aggregate uses a **Bayesian average** `(C·m + Σstars)/(C + n)`
+([`app/community/aggregate.py`](app/community/aggregate.py)) with three sort-mode
+key functions (`beste` / `geheimtipp` / `empfohlen`) the search layer can reuse
+without recomputing the numeric scoring core. License terms live in
+[`app/media/license.py`](app/media/license.py); the take-down address comes from
+`TAKEDOWN_CONTACT_EMAIL`. No new env vars beyond that (added in Sprint A).
+
+## Moderation / review (Sprint D)
+
+The operator sights and decides every user contribution from one panel. Service in
+[`app/admin/moderation.py`](app/admin/moderation.py); every decision writes a
+[`ModerationAudit`](app/models/moderation_audit.py) row (migration `0006`,
+`actor` = the logged-in email). Approvals reuse the normal admin write path — a
+submission becomes a **draft** spot via `create_spot`; a hero candidate is promoted
+into `spot.image` via `manage_spot_image` — so nothing bypasses readiness/go-live.
+
+Endpoints (admin/curator) on the `/admin` router:
+
+| Method + path                              | Effect                                          |
+| ------------------------------------------ | ----------------------------------------------- |
+| `GET  /admin/review/queue`                 | bundled items + counts (also feed `/admin/overview`) |
+| `POST /admin/submissions/{id}/approve`     | create draft spot, link `resulting_spot_id`, `merged` |
+| `POST /admin/submissions/{id}/reject`      | `rejected` + review note                        |
+| `POST /admin/images/{id}/approve`          | promote hero candidate → `published_hero`       |
+| `POST /admin/images/{id}/reject`           | `rejected`                                       |
+| `POST /admin/images/{id}/remove`           | `removed` (out of gallery/hero)                 |
+| `POST /admin/images/{id}/dismiss-reports`  | clear `report_count` + report rows              |
+| `POST /admin/tips/{id}/hide` · `/restore`  | hide/unhide a tip (reversible)                  |
+| `POST /admin/ratings/{id}/hide` · `/restore` | hide/unhide a rating (reversible)             |
+
+Frontend: an [`/admin/review`](frontend/src/pages/AdminReview.tsx) panel with tabs
+(submissions · hero images · reported images · tips & ratings), each item showing a
+preview + context + approve/reject/remove + note. The public spot page gains a
+[`SpotCommunity`](frontend/src/components/SpotCommunity.tsx) section — gallery with a
+"Melden" report dialog, ratings (aggregate + form), local tips (list + form), and a
+user image upload with the visible license checkbox (client-side hero-size gate,
+reusing `HERO_REQ`). No new env vars; migration `0006`.
 
 ## Categories, facilities, media & frontend
 
@@ -728,6 +881,16 @@ variable). Nowhere else is it hardcoded (the sole fallback is
 - **Vercel:** set `VITE_API_URL` in the project's Environment Variables to the
   deployed backend URL (e.g. `https://api.example.com`). Rebuild after changing it.
 - The backend must allow the frontend origin via `CORS_ORIGINS` (Sprint 9).
+
+> **Symptom → cause.** An **empty landing "aktuelle Top Spots" row and a dead
+> search** on the deployed site is almost always a wiring problem, *not* missing
+> data: `VITE_API_URL` is unset (so the build fell back to `http://localhost:8000`
+> and every fetch fails), the backend is down/unreachable, or `CORS_ORIGINS` does
+> not list the frontend origin. Check, in order: `GET <backend>/health` →
+> `GET <backend>/spots?status=published` returns > 0 → the browser Network tab
+> shows requests going to the **deployed** backend (not localhost) with no CORS
+> error. Only once those pass is it a content problem (see the climatology batch
+> below for empty season/best-spots panels).
 
 ### Local dev — both services at once
 ```bash

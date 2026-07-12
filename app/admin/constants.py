@@ -38,9 +38,41 @@ STYLES: tuple[str, ...] = ("freeride", "freestyle", "big_air", "wave_riding")
 # Facility kinds — exactly these five.
 FACILITY_KINDS: tuple[str, ...] = ("parking", "shower", "food", "camping", "school")
 
+# Sports offered by a spot / attached to a rating.
+SPORTS: tuple[str, ...] = ("kitesurf", "windsurf", "wing", "surf")
+
+# --- UGC / moderation vocabularies (Sprint C) ------------------------------
+# Rating/tip visibility after post-moderation.
+MODERATION_STATUS: tuple[str, ...] = ("pending", "published", "rejected", "hidden")
+# User image role and its lifecycle.
+IMAGE_KIND: tuple[str, ...] = ("gallery", "hero_candidate")
+IMAGE_STATUS: tuple[str, ...] = (
+    "pending", "approved", "published_hero", "rejected", "removed",
+)
+# Why a user reported an image.
+REPORT_REASON: tuple[str, ...] = ("copyright", "inappropriate", "wrong_spot", "other")
+# New-spot proposal lifecycle.
+SUBMISSION_STATUS: tuple[str, ...] = ("pending", "approved", "rejected", "merged")
+# Images visible in the public gallery.
+VISIBLE_IMAGE_STATUS: tuple[str, ...] = ("approved", "published_hero")
+
 
 def is_na(value) -> bool:
     return isinstance(value, str) and value.strip().lower() == NA
+
+
+def validate_sport(value: str) -> str:
+    """A single sport key. Else ``ValueError``."""
+    if value not in SPORTS:
+        raise ValueError(f"invalid sport {value!r}; allowed: {list(SPORTS)}")
+    return value
+
+
+def validate_skill_level(value: str) -> str:
+    """A single skill level (beginner..pro). Else ``ValueError``."""
+    if value not in LEVELS:
+        raise ValueError(f"invalid skill_level {value!r}; allowed: {list(LEVELS)}")
+    return value
 
 
 # --- enum validation -------------------------------------------------------

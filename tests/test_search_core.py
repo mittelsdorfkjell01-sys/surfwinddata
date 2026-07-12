@@ -61,6 +61,19 @@ def test_classify_geocode_area_for_island_uses_bounds():
     assert b["min_lon"] < 9.0 < b["max_lon"]
 
 
+def test_classify_geocode_island_box_covers_spread_out_spots():
+    # Regression: a large island's fallback bbox must actually contain its spots.
+    # Sardinia's spots span lat ~39.2–41.2 around the geocoded centre (40, 9);
+    # a too-small island box returned zero spots for "Sardinien".
+    geo = FakeGeocoder(
+        {"sardinia": [GeocodeResult("Sardinia", 40.0, 9.0, feature_code="ISL")]}
+    )
+    b = classify_geocode("Sardinia", geocoder=geo)["bounds"]
+    for lat, lon in [(40.05, 8.37), (39.21, 9.16), (41.19, 9.17)]:  # the 3 spots
+        assert b["min_lat"] <= lat <= b["max_lat"], (lat, b)
+        assert b["min_lon"] <= lon <= b["max_lon"], (lon, b)
+
+
 def test_classify_geocode_explicit_bbox_wins():
     geo = FakeGeocoder(
         {

@@ -1,0 +1,240 @@
+"""Read-side aggregation for the admin dashboard (Sprint B).
+
+Pure query helpers over existing tables — no new state. The endpoints in
+``app.api.admin`` expose these; the numbers here also feed ``/admin/overview``.
+Kept deliberately additive so Sprint C/D can fold in review-queue counts.
+"""
+
+from __future__ import annotations
+
+import uuid
+from typing import Any
+
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session, defer
+
+from app.admin.readiness import build_checklist
+from app.models import Era5Job, Region, RequiredField, Spot, SpotAudit
+
+_SORTS = {
+    "name": Spot.name.asc(),
+    "-name": Spot.name.desc(),
+    "updated": Spot.updated_at.asc(),
+    "-updated": Spot.updated_at.desc(),
+    "confidence": Spot.confidence.asc().nullslast(),
+    "-confidence": Spot.confidence.desc().nullslast(),
+    "status": Spot.status.asc(),
+}
+
+
+def _spot_filters(stmt, *, status, region_id, sport, q):
+    if status:
+        stmt = stmt.where(Spot.status == status)
+    if region_id is not None:
+        stmt = stmt.where(Spot.region_id == region_id)
+    if sport:
+        stmt = stmt.where(Spot.sports.any(sport))
+    if q:
+        like = f"%{q.strip()}%"
+        stmt = stmt.where(or_(Spot.name.ilike(like), Spot.slug.ilike(like)))
+    return stmt
+
+
+def list_spots(
+    db: Session,
+    *,
+    status: str | None = None,
+    region_id: uuid.UUID | None = None,
+    sport: str | None = None,
+    q: str | None = None,
+    sort: str = "name",
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[Spot], int]:
+    """Filtered, sorted, paginated spot list + total matching count."""
+    base = _spot_filters(
+        select(Spot), status=status, region_id=region_id, sport=sport, q=q
+    )
+    total = db.scalar(
+        _spot_filters(
+            select(func.count()).select_from(Spot),
+            status=status,
+            region_id=region_id,
+            sport=sport,
+            q=q,
+        )
+    )
+    stmt = (
+        base.options(
+            defer(Spot.climatology),
+            defer(Spot.editorial),
+            defer(Spot.overrides),
+            defer(Spot.era5_cell),
+        )
+        .order_by(_SORTS.get(sort, Spot.name.asc()))
+        .limit(limit)
+        .offset(offset)
+    )
+    rows = list(db.scalars(stmt).all())
+    return rows, int(total or 0)
+
+
+def _status_counts(db: Session) -> dict[str, int]:
+    rows = db.execute(
+        select(Spot.status, func.count()).group_by(Spot.status)
+    ).all()
+    counts = {s: int(n) for s, n in rows}
+    for key in ("draft", "published", "archived"):
+        counts.setdefault(key, 0)
+    counts["total"] = sum(int(n) for _, n in rows)
+    return counts
+
+
+def list_regions_with_counts(db: Session) -> list[dict[str, Any]]:
+    """Regions ordered by name, each with per-status spot counts."""
+    count_rows = db.execute(
+        select(Spot.region_id, Spot.status, func.count())
+        .group_by(Spot.region_id, Spot.status)
+    ).all()
+    by_region: dict[uuid.UUID, dict[str, int]] = {}
+    for region_id, status, n in count_rows:
+        bucket = by_region.setdefault(
+            region_id, {"draft": 0, "published": 0, "archived": 0, "total": 0}
+        )
+        bucket[status] = bucket.get(status, 0) + int(n)
+        bucket["total"] += int(n)
+
+    regions = db.scalars(select(Region).order_by(Region.name)).all()
+    out: list[dict[str, Any]] = []
+    for r in regions:
+        out.append(
+            {
+                "region": r,
+                "spot_counts": by_region.get(
+                    r.id, {"draft": 0, "published": 0, "archived": 0, "total": 0}
+                ),
+            }
+        )
+    return out
+
+
+def _latest_job_status_map(db: Session) -> dict[uuid.UUID, str]:
+    """spot_id → status of its most recent ERA5 job (Postgres DISTINCT ON)."""
+    stmt = (
+        select(Era5Job.spot_id, Era5Job.status)
+        .order_by(Era5Job.spot_id, Era5Job.created_at.desc())
+        .distinct(Era5Job.spot_id)
+    )
+    return {sid: status for sid, status in db.execute(stmt).all()}
+
+
+def _required_rules(db: Session) -> list[dict]:
+    return [
+        {"entity": r.entity, "field": r.field, "applies_when": r.applies_when,
+         "severity": r.severity}
+        for r in db.scalars(
+            select(RequiredField).where(RequiredField.entity == "spot")
+        ).all()
+    ]
+
+
+def not_live_gaps(db: Session, *, limit: int = 50) -> list[dict[str, Any]]:
+    """Non-published spots that are not yet ready, with their missing fields."""
+    rules = _required_rules(db)
+    jobs = _latest_job_status_map(db)
+    spots = db.scalars(
+        select(Spot).where(Spot.status != "published").order_by(Spot.updated_at.desc())
+    ).all()
+    out: list[dict[str, Any]] = []
+    for s in spots:
+        result = build_checklist(s, rules, job_status=jobs.get(s.id))
+        if not result["ready"]:
+            out.append(
+                {
+                    "id": str(s.id),
+                    "name": s.name,
+                    "slug": s.slug,
+                    "status": s.status,
+                    "region_id": str(s.region_id),
+                    "gaps": result["gaps"],
+                }
+            )
+        if len(out) >= limit:
+            break
+    return out
+
+
+_AUDIT_NOISE = {"auto", "from", "to"}
+
+
+def _latest_audit_map(db: Session, spot_ids: list) -> dict:
+    """spot_id → its most recent audit entry (Postgres DISTINCT ON)."""
+    if not spot_ids:
+        return {}
+    stmt = (
+        select(SpotAudit.spot_id, SpotAudit.action, SpotAudit.changes, SpotAudit.created_at)
+        .where(SpotAudit.spot_id.in_(spot_ids))
+        .order_by(SpotAudit.spot_id, SpotAudit.created_at.desc())
+        .distinct(SpotAudit.spot_id)
+    )
+    out: dict = {}
+    for spot_id, action, changes, created_at in db.execute(stmt).all():
+        fields: list[str] = []
+        if isinstance(changes, dict):
+            if "field" in changes and isinstance(changes["field"], str):
+                fields = [changes["field"]]
+            else:
+                fields = [k for k in changes.keys() if k not in _AUDIT_NOISE]
+        out[spot_id] = {
+            "action": action,
+            "fields": fields,
+            "at": created_at.isoformat() if created_at else None,
+        }
+    return out
+
+
+def recent_spots(db: Session, *, limit: int = 8) -> list[dict[str, Any]]:
+    rows = db.scalars(
+        select(Spot)
+        .options(
+            defer(Spot.climatology), defer(Spot.editorial),
+            defer(Spot.overrides), defer(Spot.era5_cell),
+        )
+        .order_by(Spot.updated_at.desc())
+        .limit(limit)
+    ).all()
+    audits = _latest_audit_map(db, [s.id for s in rows])
+    return [
+        {
+            "id": str(s.id),
+            "name": s.name,
+            "slug": s.slug,
+            "status": s.status,
+            "region_id": str(s.region_id),
+            "confidence": s.confidence,
+            "updated_at": s.updated_at.isoformat(),
+            "last_change": audits.get(s.id),
+        }
+        for s in rows
+    ]
+
+
+def overview(db: Session) -> dict[str, Any]:
+    """Dashboard KPIs, including the moderation review-queue counts + team notes."""
+    from app.admin.era5_worker import count_queued
+    from app.admin.moderation import review_counts
+    from app.admin.team import list_notes
+
+    spots = _status_counts(db)
+    regions_count = int(db.scalar(select(func.count()).select_from(Region)) or 0)
+    open_gaps = not_live_gaps(db, limit=100)
+    return {
+        "spots": spots,
+        "regions": regions_count,
+        "readiness_open": len(open_gaps),
+        "not_live": open_gaps[:20],
+        "recent": recent_spots(db),
+        "review": review_counts(db),
+        "team_notes": list_notes(db, limit=12),
+        "era5_queued": count_queued(db),
+    }

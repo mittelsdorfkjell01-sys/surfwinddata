@@ -1,13 +1,13 @@
-"""Admin FastAPI dependencies: CDS client, stock client, and the optional key."""
+"""Admin FastAPI dependencies: climatology-extract client and stock client.
+
+Auth moved to :mod:`app.auth.deps` in Sprint A (cookie session + roles). The old
+``require_admin`` shared-key gate was removed from here; the optional break-glass
+``X-Admin-Key`` is handled inside ``app.auth.deps.current_user``.
+"""
 
 from __future__ import annotations
 
-import secrets
-
-from fastapi import Header, HTTPException
-
 from app.admin.stock import StockImageClient, default_stock_client
-from app.config import get_settings
 
 
 def get_extract_client():
@@ -31,10 +31,3 @@ get_cds_client = get_extract_client
 
 def get_stock_client() -> StockImageClient:
     return default_stock_client()
-
-
-def require_admin(x_admin_key: str | None = Header(default=None)) -> None:
-    """Gate admin endpoints with ``ADMIN_KEY`` when configured (else open)."""
-    key = get_settings().admin_key
-    if key and not secrets.compare_digest(x_admin_key or "", key):
-        raise HTTPException(status_code=401, detail="invalid or missing admin key")

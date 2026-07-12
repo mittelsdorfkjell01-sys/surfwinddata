@@ -138,6 +138,67 @@ def test_set_live_blocked_until_ready_then_succeeds(admin, region_id, db):
     assert live.json()["status"] == "published"
 
 
+def test_unpublish_and_archive(admin, region_id, db):
+    """A spot can be taken offline (→ draft) and archived, each audited."""
+    spot = _create_spot(admin, region_id)
+    sid = spot["id"]
+
+    arch = admin.post(f"/admin/spots/{sid}/archive")
+    assert arch.status_code == 200 and arch.json()["status"] == "archived"
+    assert db.get(Spot, sid).status == "archived"
+
+    off = admin.post(f"/admin/spots/{sid}/unpublish")
+    assert off.status_code == 200 and off.json()["status"] == "draft"
+    assert db.get(Spot, sid).status == "draft"
+
+    actions = {
+        a.action
+        for a in db.scalars(select(SpotAudit).where(SpotAudit.spot_id == sid)).all()
+    }
+    assert {"archive", "unpublish"} <= actions
+
+
+def test_overview_recent_has_last_change(admin, region_id):
+    """A freshly created spot surfaces in the dashboard 'recent' list with its
+    latest audited change (here: the create)."""
+    spot = _create_spot(admin, region_id)
+    recent = admin.get("/admin/overview").json()["recent"]
+    entry = next((r for r in recent if r["id"] == spot["id"]), None)
+    assert entry is not None
+    assert entry["last_change"] is not None
+    assert entry["last_change"]["action"] == "create"
+
+
+def test_era5_autoprocess_on_create(admin, region_id, db, tmp_path, monkeypatch):
+    """With ERA5_AUTOPROCESS on, creating a spot computes its climatology in the
+    background (via the fake extract client) — no manual batch run."""
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "era5_autoprocess", True)
+    monkeypatch.setattr(get_settings(), "era5_raw_dir", str(tmp_path))
+
+    spot = _create_spot(admin, region_id)
+    db.expire_all()
+    row = db.get(Spot, spot["id"])
+    assert row.climatology and row.climatology.get("weeks")
+
+
+def test_era5_process_queue(admin, region_id, db, tmp_path, monkeypatch):
+    """Button B: a queued spot's climatology is computed by the queue endpoint."""
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "era5_raw_dir", str(tmp_path))
+    spot = _create_spot(admin, region_id)  # autoprocess off → stays queued
+
+    resp = admin.post("/admin/era5/process-queue")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["queued"] >= 1
+
+    db.expire_all()
+    row = db.get(Spot, spot["id"])
+    assert row.climatology and row.climatology.get("weeks")
+
+
 def test_na_counts_as_fulfilled(admin, region_id, db):
     # a spot whose description is explicitly n/a still satisfies that rule
     spot = _create_spot(admin, region_id)
@@ -208,3 +269,166 @@ def test_region_stock_image(admin, region_id):
     assert resp.status_code == 200
     img = resp.json()["image"]
     assert img["license"] and img["credit"]
+
+
+# --- region edit (Sprint: admin UX) ----------------------------------------
+
+def test_region_update_and_manual_image(admin, region_id):
+    r = admin.patch(f"/admin/regions/{region_id}", json={
+        "description": "Schöne Ostsee-Region",
+        "season": {"weeks": [{"week": 1, "wind_p50": 12}]},
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["description"] == "Schöne Ostsee-Region"
+    assert body["season"]["weeks"][0]["wind_p50"] == 12
+
+    img = admin.post(f"/admin/regions/{region_id}/image", json={
+        "url": "https://img/region.jpg", "credit": "Jo",
+    })
+    assert img.status_code == 200
+    assert img.json()["image"]["url"] == "https://img/region.jpg"
+
+
+def test_reassign_spot_between_regions(admin, region_id):
+    spot = _create_spot(admin, region_id)
+    suffix = uuid.uuid4().hex[:8]
+    rid2 = admin.post("/admin/regions", json={
+        "name": f"Test Region {suffix}", "slug": f"test-region-{suffix}",
+        "country": "DE", "lat": 54.5, "lon": 10.5,
+        "defaults": {"model_pref": "icon_d2"},
+    }).json()["id"]
+    moved = admin.post(
+        f"/admin/spots/{spot['id']}/assign-region", json={"region_id": rid2}
+    )
+    assert moved.status_code == 200
+    assert moved.json()["region_id"] == rid2
+
+
+# --- team notes + activity -------------------------------------------------
+
+def test_team_notes_crud(admin):
+    created = admin.post("/admin/team-notes", json={"body": "Bitte Laboe prüfen"})
+    assert created.status_code == 201, created.text
+    nid = created.json()["id"]
+    assert created.json()["author"]  # actor recorded
+
+    assert any(n["id"] == nid for n in admin.get("/admin/team-notes").json())
+    assert admin.post("/admin/team-notes", json={"body": "   "}).status_code == 422
+
+    assert admin.delete(f"/admin/team-notes/{nid}").status_code == 204
+    assert all(n["id"] != nid for n in admin.get("/admin/team-notes").json())
+
+
+def test_activity_lists_real_changes(admin, region_id):
+    spot = _create_spot(admin, region_id)
+    acts = admin.get("/admin/activity").json()
+    assert any(
+        a["kind"] == "spot" and a["actor"] and a["target"] == spot["name"]
+        for a in acts
+    )
+
+
+def test_overview_has_team_notes_and_review(admin):
+    body = admin.get("/admin/overview").json()
+    assert "team_notes" in body and isinstance(body["team_notes"], list)
+    assert "review" in body and "submissions_pending" in body["review"]
+
+
+def test_spot_image_focal(admin, region_id):
+    spot = _create_spot(admin, region_id)
+    sid = spot["id"]
+    admin.post(f"/admin/spots/{sid}/image", json={
+        "url": "https://img/x.jpg", "source": "unsplash",
+        "license": "Unsplash License", "credit": "Jo",
+    })
+    resp = admin.post(f"/admin/spots/{sid}/image/focal", json={"x": 30, "y": 70})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["image"]["focal"] == {"x": 30.0, "y": 70.0}
+
+
+def test_region_image_focal(admin, region_id):
+    admin.post(f"/admin/regions/{region_id}/image", json={
+        "url": "https://img/r.jpg", "credit": "Jo",
+    })
+    resp = admin.post(f"/admin/regions/{region_id}/image/focal", json={"x": 25, "y": 40})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["image"]["focal"] == {"x": 25.0, "y": 40.0}
+
+
+def test_focal_without_image_422(admin, region_id):
+    spot = _create_spot(admin, region_id)
+    resp = admin.post(f"/admin/spots/{spot['id']}/image/focal", json={"x": 10, "y": 10})
+    assert resp.status_code == 422
+
+
+def test_board_task_crud(admin):
+    created = admin.post("/admin/board/tasks", json={"title": "Laboe prüfen", "body": "Hero fehlt"})
+    assert created.status_code == 201, created.text
+    tid = created.json()["id"]
+    assert created.json()["status"] == "open"
+
+    assert any(t["id"] == tid for t in admin.get("/admin/board/tasks").json())
+    assert admin.post("/admin/board/tasks", json={"title": "  "}).status_code == 422
+
+    moved = admin.patch(f"/admin/board/tasks/{tid}", json={"status": "done"})
+    assert moved.status_code == 200 and moved.json()["status"] == "done"
+
+    assert admin.delete(f"/admin/board/tasks/{tid}").status_code == 204
+    assert all(t["id"] != tid for t in admin.get("/admin/board/tasks").json())
+
+
+def test_activity_shows_changed_fields(admin, region_id):
+    spot = _create_spot(admin, region_id)
+    admin.patch(f"/admin/spots/{spot['id']}", json={"level": "advanced"})
+    acts = admin.get("/admin/activity").json()
+    upd = next(
+        (a for a in acts if a["target"] == spot["name"] and a["action"] == "update"),
+        None,
+    )
+    assert upd is not None
+    assert "level" in upd["fields"]
+
+
+def test_region_create_geocodes_without_coords(admin):
+    from app.search.deps import get_geocoder
+    from app.search.geocode import GeocodeResult
+
+    class _Geo:
+        def geocode(self, q):
+            return [GeocodeResult(name="Sardinien", lat=40.0, lon=9.0,
+                                  feature_code="ISL", country="IT")]
+
+    app.dependency_overrides[get_geocoder] = lambda: _Geo()
+    try:
+        suffix = uuid.uuid4().hex[:8]
+        resp = admin.post("/admin/regions", json={
+            "name": f"Test Region {suffix}", "slug": f"test-region-{suffix}",
+            "country": "IT",
+        })
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["center"]["lat"] == 40.0 and body["center"]["lon"] == 9.0
+        assert body["bounds"] is not None  # island → area bounds derived
+    finally:
+        app.dependency_overrides.pop(get_geocoder, None)
+
+
+def test_geocode_endpoint(admin):
+    from app.search.deps import get_geocoder
+    from app.search.geocode import GeocodeResult
+    from tests.search_helpers import FakeGeocoder
+
+    app.dependency_overrides[get_geocoder] = lambda: FakeGeocoder(
+        {"laboe": [GeocodeResult(name="Laboe", lat=54.4, lon=10.2,
+                                 feature_code="PPL", country="DE")]}
+    )
+    try:
+        resp = admin.get("/admin/geocode", params={"q": "Laboe"})
+        assert resp.status_code == 200, resp.text
+        hits = resp.json()
+        assert hits, "expected at least one geocode hit"
+        hit = hits[0]
+        assert hit["name"] and isinstance(hit["lat"], float) and isinstance(hit["lon"], float)
+    finally:
+        app.dependency_overrides.pop(get_geocoder, None)

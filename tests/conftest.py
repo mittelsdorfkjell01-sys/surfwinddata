@@ -15,6 +15,9 @@ from app.config import Settings, get_settings
 # --- redirect the app to the test database BEFORE engine creation ---------
 _TEST_URL = Settings().test_database_url
 os.environ["DATABASE_URL"] = _TEST_URL
+# Keep ERA5 background auto-processing off in tests (a dev .env may enable it);
+# tests that exercise it flip the setting explicitly.
+os.environ["ERA5_AUTOPROCESS"] = "false"
 get_settings.cache_clear()
 
 import pytest  # noqa: E402
@@ -65,6 +68,54 @@ def _migrated_db():
     yield
 
 
+# --- auth (Sprint A): every /admin/* route now needs a session cookie --------
+# Seed a known admin + curator once per session; the default `client` logs in as
+# the admin so pre-auth admin tests keep working. Tests that need a different
+# principal use `curator_client` / `anon_client` or build their own TestClient.
+TEST_ADMIN = {"email": "admin@test.local", "password": "admin-pw-123", "role": "admin"}
+TEST_CURATOR = {
+    "email": "curator@test.local",
+    "password": "curator-pw-123",
+    "role": "curator",
+}
+
+
+def _ensure_auth_users() -> None:
+    """Create the known admin/curator users if missing. Idempotent, so it also
+    heals the schema after the migration round-trip test drops admin_users."""
+    from app.auth import service
+
+    db = SessionLocal()
+    try:
+        for u in (TEST_ADMIN, TEST_CURATOR):
+            if service.get_by_email(db, u["email"]) is None:
+                service.create_user(
+                    db,
+                    email=u["email"],
+                    password=u["password"],
+                    display_name=u["role"].title(),
+                    role=u["role"],
+                )
+        db.commit()
+    finally:
+        db.close()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _auth_users(_migrated_db):
+    if not DB_AVAILABLE:
+        return
+    _ensure_auth_users()
+
+
+def _login(c: TestClient, creds: dict) -> TestClient:
+    resp = c.post(
+        "/auth/login", json={"email": creds["email"], "password": creds["password"]}
+    )
+    assert resp.status_code == 200, resp.text
+    return c
+
+
 @pytest.fixture
 def db():
     require_db()
@@ -76,6 +127,20 @@ def db():
 
 
 @pytest.fixture
-def client():
+def client(_auth_users):
+    require_db()
+    _ensure_auth_users()  # heal after any mid-session schema reset
+    return _login(TestClient(app), TEST_ADMIN)
+
+
+@pytest.fixture
+def curator_client(_auth_users):
+    require_db()
+    _ensure_auth_users()
+    return _login(TestClient(app), TEST_CURATOR)
+
+
+@pytest.fixture
+def anon_client():
     require_db()
     return TestClient(app)

@@ -5,6 +5,11 @@ import { ErrorBanner, EmptyState } from "../components/AsyncStates";
 import * as api from "../lib/api";
 import { sportLabel } from "../lib/labels";
 
+const MONTHS = [
+  "Januar", "Februar", "März", "April", "Mai", "Juni",
+  "Juli", "August", "September", "Oktober", "November", "Dezember",
+];
+
 /** A skeleton list of result rows. */
 function ResultSkeleton() {
   return (
@@ -17,18 +22,27 @@ function ResultSkeleton() {
 }
 
 /**
- * Search results. With a query it calls GET /search (entity/geocode resolution);
- * with no query it answers the "open place / open time" case — the best regions
- * for the season (travel default) via GET /search/best-regions.
+ * Search results — routes on which axes are open (place × time):
+ *  • place fixed + time fixed/free → GET /search (spots/regions).
+ *  • place fixed (entity) + time open → GET /areas/best-weeks (best weeks here).
+ *  • place open → GET /search/best-regions (best regions, for a month or season).
  */
 export default function SearchResults() {
   const [params] = useSearchParams();
-  const q = params.get("q") ?? "";
+  const q = (params.get("q") ?? "").trim();
   const sport = params.get("sport") ?? undefined;
   const week = params.get("week");
+  const month = params.get("month");
+  const spotId = params.get("spot_id") ?? undefined;
+  const regionId = params.get("region_id") ?? undefined;
+
+  const placeOpen = !q && !spotId && !regionId;
+  const timeOpen = !week && !month;
+  const placeEntity = spotId ?? regionId;
 
   const [result, setResult] = useState<api.SearchResult | null>(null);
   const [bestRegions, setBestRegions] = useState<api.BestRegionsResponse | null>(null);
+  const [bestWeeks, setBestWeeks] = useState<api.BestWeeksResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,16 +52,25 @@ export default function SearchResults() {
     setError(null);
     setResult(null);
     setBestRegions(null);
+    setBestWeeks(null);
 
-    const run = q.trim()
-      ? api
-          .getSearch({
-            q: q.trim(),
-            sport,
-            week: week ? Number(week) : undefined,
-          })
-          .then((r) => alive && setResult(r))
-      : api.getBestRegions({ sport }).then((r) => alive && setBestRegions(r));
+    let run: Promise<unknown>;
+    if (placeOpen) {
+      // WO offen → beste Reviere (für den Monat, sonst die Saison)
+      run = api
+        .getBestRegions({ sport, month: month ? Number(month) : undefined })
+        .then((r) => alive && setBestRegions(r));
+    } else if (placeEntity && timeOpen) {
+      // Ort fix + WANN offen → beste Wochen für diesen Ort
+      run = api
+        .getBestWeeks({ spot_id: spotId, region_id: regionId, sport })
+        .then((r) => alive && setBestWeeks(r));
+    } else {
+      // Ort + Zeit fix (oder Freitext) → Spot-/Regionen-Suche
+      run = api
+        .getSearch({ q, sport, week: week ? Number(week) : undefined })
+        .then((r) => alive && setResult(r));
+    }
 
     run
       .catch(
@@ -59,11 +82,16 @@ export default function SearchResults() {
     return () => {
       alive = false;
     };
-  }, [q, sport, week]);
+  }, [q, sport, week, month, spotId, regionId, placeOpen, placeEntity, timeOpen]);
 
-  const heading = q.trim()
-    ? `Suche: „${q.trim()}“`
-    : "Beste Reviere für die Saison";
+  const monthName = month ? MONTHS[Number(month) - 1] : null;
+  const heading = placeOpen
+    ? monthName
+      ? `Beste Reviere im ${monthName}`
+      : "Beste Reviere für die Saison"
+    : placeEntity && timeOpen
+    ? `Beste Wochen für „${q}“`
+    : `Suche: „${q}“`;
 
   return (
     <div className="min-h-screen bg-white">
@@ -88,13 +116,12 @@ export default function SearchResults() {
         <div className="mt-8">
           {loading && <ResultSkeleton />}
           {error && !loading && <ErrorBanner message={error} />}
-
-          {!loading && !error && result && (
-            <SearchHits result={result} />
-          )}
-
+          {!loading && !error && result && <SearchHits result={result} />}
           {!loading && !error && bestRegions && (
-            <BestRegionsList data={bestRegions} />
+            <BestRegionsList data={bestRegions} monthName={monthName} />
+          )}
+          {!loading && !error && bestWeeks && (
+            <BestWeeksList data={bestWeeks} place={q} />
           )}
         </div>
       </main>
@@ -161,8 +188,16 @@ function SearchHits({ result }: { result: api.SearchResult }) {
   );
 }
 
-function BestRegionsList({ data }: { data: api.BestRegionsResponse }) {
-  const ranking = data.regions ?? [];
+function BestRegionsList({
+  data,
+  monthName,
+}: {
+  data: api.BestRegionsResponse;
+  monthName: string | null;
+}) {
+  const ranking = (data.regions ?? []).filter(
+    (r) => (r.coverage ?? 0) > 0 || (r.intensity ?? 0) > 0
+  );
   if (ranking.length === 0) {
     return (
       <EmptyState message="Noch keine Saison-Daten (Klimatologie fehlt für die veröffentlichten Spots)." />
@@ -171,8 +206,8 @@ function BestRegionsList({ data }: { data: api.BestRegionsResponse }) {
   return (
     <section>
       <p className="mb-3 text-[14px] text-muted">
-        Offene Achse: wohin, wenn Ort und Zeit offen sind — Reviere nach Abdeckung
-        über die Saison.
+        Offene Achse <b>wo</b>: die besten Reviere{" "}
+        {monthName ? `im ${monthName}` : "über die Saison"} — nach Abdeckung.
       </p>
       <ul className="space-y-2">
         {ranking.map((r, i) => (
@@ -190,6 +225,51 @@ function BestRegionsList({ data }: { data: api.BestRegionsResponse }) {
                 </span>
               )}
             </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function BestWeeksList({
+  data,
+  place,
+}: {
+  data: api.BestWeeksResponse;
+  place: string;
+}) {
+  const weeks = (data.weeks ?? []).filter((w) => (w.score ?? 0) > 0).slice(0, 12);
+  if (weeks.length === 0) {
+    return (
+      <EmptyState message="Noch keine Saison-Daten für diesen Ort (Klimatologie fehlt)." />
+    );
+  }
+  const max = Math.max(...weeks.map((w) => w.score ?? 0), 0.01);
+  return (
+    <section>
+      <p className="mb-3 text-[14px] text-muted">
+        Offene Achse <b>wann</b>: die besten Wochen für {place || "diesen Ort"} —
+        nach nutzbaren Stunden.
+      </p>
+      <ul className="space-y-2">
+        {weeks.map((w) => (
+          <li
+            key={w.week}
+            className="flex items-center gap-4 rounded-xl bg-[#F1F5FA] px-4 py-3"
+          >
+            <span className="w-16 shrink-0 font-medium text-navy">KW {w.week}</span>
+            <span className="h-2 flex-1 overflow-hidden rounded-full bg-navy/10">
+              <span
+                className="block h-full rounded-full bg-brand-teal"
+                style={{ width: `${Math.round(((w.score ?? 0) / max) * 100)}%` }}
+              />
+            </span>
+            {typeof w.score === "number" && (
+              <span className="w-24 shrink-0 text-right text-[13px] text-muted">
+                {Math.round(w.score * 100)}% nutzbar
+              </span>
+            )}
           </li>
         ))}
       </ul>

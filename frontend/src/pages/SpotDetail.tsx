@@ -1,5 +1,6 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { WindBadge } from "../components/SpotBits";
+import LandingHeader from "../components/LandingHeader";
 import HeroImage from "../components/HeroImage";
 import SpotImage from "../components/SpotImage";
 import LiveConditions from "../components/LiveConditions";
@@ -9,8 +10,9 @@ import SpotFlowMap from "../components/SpotFlowMap";
 import Forecast from "../components/Forecast";
 import WindMonths from "../components/WindMonths";
 import SimilarSpots from "../components/SimilarSpots";
+import SpotCommunity from "../components/SpotCommunity";
 import { ErrorBanner, EmptyState } from "../components/AsyncStates";
-import { CloseIcon } from "../lib/icons";
+import { ChevronDownIcon } from "../lib/icons";
 import { regionSlug } from "../lib/types";
 import { useSpot, useSpotLive, useSpotForecast } from "../lib/hooks";
 import { facilitiesFromMap, spotFactsFrom } from "../lib/spotView";
@@ -32,7 +34,8 @@ export default function SpotDetail() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white">
+      <div className="relative min-h-screen bg-white">
+        <LandingHeader />
         <div className="h-[64vh] min-h-[520px] w-full animate-pulse bg-navy-soft" />
         <div className="mx-auto max-w-[1400px] px-4 pt-16 sm:px-8">
           <div className="h-6 w-2/3 animate-pulse rounded bg-line" />
@@ -80,7 +83,9 @@ export default function SpotDetail() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="relative min-h-screen bg-white">
+      <LandingHeader />
+
       {/* ── Hero: full-bleed image with the spot card floating ON it (as in the PNG) ── */}
       <section className="relative">
         <div className="relative h-[64vh] min-h-[520px] w-full overflow-hidden bg-navy-soft">
@@ -89,22 +94,25 @@ export default function SpotDetail() {
               src={spot.hero}
               alt={spot.name}
               className="h-full w-full object-cover"
+              focal={spot.heroFocal}
             />
           ) : (
             <SpotImage name={spot.name} region={spot.region} />
           )}
           <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/10" />
 
-          {/* Close button — aligned to the content edge (same as the map below) */}
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-20">
-            <div className="mx-auto flex max-w-[1400px] justify-end px-4 pt-5 sm:px-8">
+          {/* Back — landing-style white pill, tucked below the floating header so it
+              never collides with the account pill on the right. */}
+          <div className="pointer-events-none absolute inset-x-0 top-[104px] z-20 sm:top-[120px]">
+            <div className="mx-auto flex max-w-[1500px] px-4 sm:px-10">
               <button
                 type="button"
                 onClick={goBack}
-                aria-label="Schließen"
-                className="pointer-events-auto grid h-11 w-11 place-items-center rounded-full bg-white text-navy shadow-pill transition-colors hover:bg-white/90"
+                aria-label="Zurück"
+                className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-white/95 py-2 pl-2.5 pr-4 text-[14px] font-medium text-brand-teal shadow-pill backdrop-blur transition-colors hover:bg-white"
               >
-                <CloseIcon className="text-[20px]" />
+                <ChevronDownIcon className="rotate-90 text-[18px]" />
+                Zurück
               </button>
             </div>
           </div>
@@ -118,7 +126,7 @@ export default function SpotDetail() {
                 </h1>
                 <Link
                   to={`/region/${regionSlug(spot.region)}`}
-                  className="text-[14px] text-muted underline-offset-2 hover:underline"
+                  className="text-[14px] font-medium text-brand-teal underline-offset-2 hover:underline"
                 >
                   {regionName}
                 </Link>
@@ -138,7 +146,7 @@ export default function SpotDetail() {
           {breadcrumb.map((crumb, i) => (
             <span key={crumb}>
               {i > 0 && <span className="mx-1.5 text-muted">›</span>}
-              <span className={i === breadcrumb.length - 1 ? "text-navy" : ""}>{crumb}</span>
+              <span className={i === breadcrumb.length - 1 ? "text-brand-teal" : ""}>{crumb}</span>
             </span>
           ))}
         </nav>
@@ -162,7 +170,7 @@ export default function SpotDetail() {
             {liveConditions ? (
               <LiveConditions live={liveConditions} />
             ) : (
-              <div className="rounded-2xl bg-[#F1F5FA] px-4 py-6 text-center text-[13px] text-muted">
+              <div className="rounded-3xl bg-cream px-4 py-6 text-center text-[13px] text-muted">
                 Live-Bedingungen momentan nicht verfügbar.
               </div>
             )}
@@ -176,6 +184,8 @@ export default function SpotDetail() {
               coast={spot.coast ?? ((spot.waveDir ?? windDir) + 180) % 360}
               period={liveConditions?.period ?? 5}
               waterType={waterType}
+              zoom={spot.mapView?.zoom}
+              mapCenter={spot.mapView?.center}
             />
           </div>
         </div>
@@ -208,6 +218,13 @@ export default function SpotDetail() {
         {facilities.length > 0 && (
           <div className="mt-14">
             <Facilities items={facilities} />
+          </div>
+        )}
+
+        {/* Community: Bewertungen, Tips, Bildergalerie */}
+        {id && (
+          <div className="mt-20">
+            <SpotCommunity spotId={id} />
           </div>
         )}
 

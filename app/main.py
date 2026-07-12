@@ -5,12 +5,59 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
-from app.api import admin, regions, search, spots
+from app.api import (
+    admin,
+    admin_moderation,
+    admin_users,
+    auth,
+    community,
+    regions,
+    search,
+    spots,
+)
 from app.config import get_settings
 
 settings = get_settings()
 
 app = FastAPI(title=settings.api_title, debug=settings.api_debug)
+
+
+@app.on_event("startup")
+def _bootstrap_admin_user() -> None:
+    """Create the first admin from ADMIN_BOOTSTRAP_* if no AdminUser exists.
+
+    Best-effort and idempotent: a missing DB or unset settings is a no-op, so the
+    app still starts (e.g. in a broken-DB state a health check can report it).
+    """
+    try:
+        from app.auth.service import bootstrap_admin
+        from app.db.session import SessionLocal
+
+        db = SessionLocal()
+        try:
+            user = bootstrap_admin(db)
+            if user is not None:
+                print(f"[bootstrap] created initial admin: {user.email}")
+        finally:
+            db.close()
+    except Exception as exc:  # never let bootstrap crash startup
+        print(f"[bootstrap] skipped ({type(exc).__name__}: {exc})")
+
+
+@app.on_event("startup")
+def _drain_era5_queue() -> None:
+    """When ERA5 auto-processing is on, drain any pending climatology jobs in a
+    background thread — so leftover queued spots get computed with no manual
+    button (fully in the background)."""
+    try:
+        if get_settings().era5_autoprocess:
+            from app.admin.era5_worker import run_queue_in_background
+
+            run_queue_in_background()
+            print("[era5] background queue drain started")
+    except Exception as exc:
+        print(f"[era5] queue drain skipped ({type(exc).__name__}: {exc})")
+
 
 # Let the browser SPA (Vite dev server, and any configured origins) call the API.
 app.add_middleware(
@@ -29,10 +76,14 @@ app.mount(
     name="media",
 )
 
+app.include_router(auth.router)
 app.include_router(spots.router)
 app.include_router(regions.router)
 app.include_router(search.router)
+app.include_router(community.router)
 app.include_router(admin.router)
+app.include_router(admin_users.router)
+app.include_router(admin_moderation.router)
 
 
 def _check_db() -> bool:
