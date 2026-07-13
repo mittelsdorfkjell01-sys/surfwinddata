@@ -5,6 +5,22 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
+def _normalize_pg_driver(url: str) -> str:
+    """Pin Postgres URLs to the psycopg (v3) driver that this app installs.
+
+    Managed providers (e.g. Vercel's Neon integration) hand out plain
+    ``postgres://`` / ``postgresql://`` URLs. SQLAlchemy maps those to the
+    psycopg2 dialect by default, but only ``psycopg[binary]`` (v3) is installed
+    here — so import fails with ``No module named 'psycopg2'``. Rewrite the bare
+    scheme to ``postgresql+psycopg://`` while leaving an explicitly chosen
+    driver (``postgresql+asyncpg://`` etc.) untouched.
+    """
+    for scheme in ("postgresql://", "postgres://"):
+        if url.startswith(scheme):
+            return "postgresql+psycopg://" + url[len(scheme):]
+    return url
+
+
 class Settings(BaseSettings):
     """Application configuration, sourced from environment variables / .env."""
 
@@ -51,6 +67,11 @@ class Settings(BaseSettings):
     # server). True => NullPool (open+close per checkout); pair it with a
     # server-side pooler (e.g. Neon's pooled endpoint). False => normal pool.
     db_serverless: bool = False
+
+    @field_validator("database_url", "test_database_url", mode="after")
+    @classmethod
+    def _pin_pg_driver(cls, v: str) -> str:
+        return _normalize_pg_driver(v)
 
     @field_validator("cors_origins", mode="before")
     @classmethod
