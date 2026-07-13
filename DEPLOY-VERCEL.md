@@ -1,17 +1,32 @@
-# Deploy everything on Vercel (serverless)
+# Deploy on Vercel (serverless)
 
-The whole app on one Vercel project + domain (`kjellmittelsdorf.de`):
+**Two Vercel projects from this one repo, one shared database.** Public site and
+admin back office live on separate domains; each is same-origin (SPA + its own
+`/api` on the same host), so every login cookie stays first-party — **no CORS,
+no `SameSite=None`**. They differ only by two flags (below) and their env vars.
 
 ```
-kjellmittelsdorf.de (Vercel)
- ├── /            → static Vite SPA (incl. /admin dashboard)
- └── /api/*       → Python serverless function (FastAPI)
-                     ├── Postgres+PostGIS → Neon  (external)
-                     ├── Redis cache      → Upstash (external)
-                     └── image uploads    → Vercel Blob
+surfwinddata.com (public project)          kjellmittelsdorf.de (admin project)
+ ├── /            → public SPA               ├── /            → redirects to /admin
+ │                  (NO admin code)          ├── /admin       → back-office SPA + login
+ └── /api/*       → FastAPI                  └── /api/*       → FastAPI
+       (public + community routes only)            (full: + /auth + /admin*)
+                    \                               /
+                     \____ same Neon DB + Upstash + Blob ____/
 ```
 
-Because the SPA and `/api` share one origin, the login cookie stays same-site
+The split is driven by two flags:
+
+| Flag | Public project | Admin project | Effect |
+|---|---|---|---|
+| `VITE_INCLUDE_ADMIN` (build) | *unset* | `true` | Admin UI compiled into the bundle only when `true`; the public build ships zero admin code (no admin chunk, no `/admin`/`/auth` strings). |
+| `ENABLE_ADMIN_API` (runtime) | `false` | *unset* (default `true`) | Public function drops the `/auth` + `/admin*` routers entirely — its origin exposes only public + community endpoints. |
+
+Both projects: **Root Directory = repo root** (so the full-stack `vercel.json`
+bundles `api/index.py`), same build command. Local `npm run dev` always includes
+admin at `/admin` and keeps the public landing at `/`.
+
+Because each SPA and its `/api` share one origin, the login cookie stays same-site
 (`SameSite=Lax` + `Secure`) and there is **no CORS**.
 
 > **Honesty note.** Vercel can't run your Postgres/Redis/background jobs — those
@@ -63,27 +78,45 @@ python -m scripts.verify_content        # red/green check
 ```
 Re-run `app.era5.batch` from your machine whenever you add spots (it's idempotent).
 
-## Step 5 — Vercel project
-1. <https://vercel.com> → **Add New → Project** → import the `surfwinddata` repo.
-   Keep **Root Directory = repo root** (the included `vercel.json` drives the build).
-2. **Environment Variables** (Production):
+## Step 5 — Vercel projects (two)
+Import the `surfwinddata` repo **twice** — once per project. Both keep **Root
+Directory = repo root** (the included `vercel.json` drives the build).
 
-   | Key | Value |
-   |---|---|
-   | `DATABASE_URL` | Neon **pooled** URL (`postgresql+psycopg://…-pooler…?sslmode=require`) |
-   | `DB_SERVERLESS` | `true` |
-   | `REDIS_URL` | Upstash `rediss://…` |
-   | `MEDIA_BACKEND` | `blob` |
-   | `BLOB_READ_WRITE_TOKEN` | (auto-added by the Blob store — leave it) |
-   | `JWT_SECRET` | `openssl rand -base64 48` |
-   | `ADMIN_BOOTSTRAP_EMAIL` | your admin email |
-   | `ADMIN_BOOTSTRAP_PASSWORD` | a strong password (change after first login) |
-   | `COOKIE_SECURE` | `true` |
-   | `ERA5_AUTOPROCESS` | `false` (no background threads on serverless) |
-   | `API_DEBUG` | `false` |
-   | `TAKEDOWN_CONTACT_EMAIL` | e.g. `abuse@kjellmittelsdorf.de` |
+**Shared env vars** (set on *both* projects, identical values — same DB/cache/blob):
 
-3. **Deploy.**
+| Key | Value |
+|---|---|
+| `DATABASE_URL` | Neon **pooled** URL (`postgresql+psycopg://…-pooler…?sslmode=require`) |
+| `DB_SERVERLESS` | `true` |
+| `REDIS_URL` | Upstash `rediss://…` |
+| `MEDIA_BACKEND` | `blob` |
+| `BLOB_READ_WRITE_TOKEN` | (auto-added by each project's Blob store — leave it) |
+| `ERA5_AUTOPROCESS` | `false` (no background threads on serverless) |
+| `API_DEBUG` | `false` |
+
+**Public project** (`surfwinddata.com`) — add only:
+
+| Key | Value |
+|---|---|
+| `ENABLE_ADMIN_API` | `false` (drops `/auth` + `/admin*`) |
+
+*(no `VITE_INCLUDE_ADMIN`, no `JWT_SECRET`/`ADMIN_BOOTSTRAP_*` — the public build has no admin.)*
+
+**Admin project** (`kjellmittelsdorf.de`) — add:
+
+| Key | Value |
+|---|---|
+| `VITE_INCLUDE_ADMIN` | `true` (compiles the admin UI into the build) |
+| `JWT_SECRET` | `openssl rand -base64 48` |
+| `ADMIN_BOOTSTRAP_EMAIL` | your admin email |
+| `ADMIN_BOOTSTRAP_PASSWORD` | a strong password (change after first login) |
+| `COOKIE_SECURE` | `true` |
+| `TAKEDOWN_CONTACT_EMAIL` | e.g. `abuse@kjellmittelsdorf.de` |
+
+*(leave `ENABLE_ADMIN_API` unset — it defaults to `true`.)*
+
+3. **Deploy both.** Point `surfwinddata.com` at the public project and
+   `kjellmittelsdorf.de` at the admin project (Settings → Domains).
 
 ## Step 6 — domain
 Project → **Settings → Domains** → add `kjellmittelsdorf.de` → set the DNS records

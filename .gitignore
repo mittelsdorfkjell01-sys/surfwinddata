@@ -9,6 +9,9 @@ __pycache__/
 .env
 .env.*
 !.env.example
+# frontend/.env.production holds only the public same-origin API base (VITE_API_URL=/api),
+# no secrets — Vite's idiomatic committed prod config, so keep it tracked.
+!frontend/.env.production
 # (env.prod.example has no leading dot, so it is not matched above and stays tracked.)
 
 # Backups (pg_dump / media tarballs written on the host)

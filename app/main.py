@@ -29,6 +29,8 @@ def _bootstrap_admin_user() -> None:
     Best-effort and idempotent: a missing DB or unset settings is a no-op, so the
     app still starts (e.g. in a broken-DB state a health check can report it).
     """
+    if not settings.enable_admin_api:
+        return  # public deployment: no back office, no bootstrap
     try:
         from app.auth.service import bootstrap_admin
         from app.db.session import SessionLocal
@@ -80,14 +82,19 @@ if settings.media_backend == "local":
         name="media",
     )
 
-app.include_router(auth.router)
+# Public + community endpoints — served by every deployment.
 app.include_router(spots.router)
 app.include_router(regions.router)
 app.include_router(search.router)
 app.include_router(community.router)
-app.include_router(admin.router)
-app.include_router(admin_users.router)
-app.include_router(admin_moderation.router)
+
+# Back office — auth + /admin* routers. Excluded on the public deployment
+# (ENABLE_ADMIN_API=false) so surfwinddata.com's origin exposes no admin surface.
+if settings.enable_admin_api:
+    app.include_router(auth.router)
+    app.include_router(admin.router)
+    app.include_router(admin_users.router)
+    app.include_router(admin_moderation.router)
 
 
 def _check_db() -> bool:
