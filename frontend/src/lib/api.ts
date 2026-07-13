@@ -3,6 +3,7 @@
 // returns typed data or throws an ApiError the UI can surface.
 
 import { getAdminKey } from "./adminKey";
+import { INCLUDE_ADMIN } from "./target";
 
 export const API_BASE: string =
   (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ||
@@ -237,6 +238,48 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await resp.json()) as T;
 }
 
+// --- read-through cache ----------------------------------------------------
+// The public site is read-only, so GETs for near-static data (regions, the
+// spot list, a spot record) are cached in-memory for the tab session: revisiting
+// the landing, paging back from a spot, or reopening the map no longer refetches.
+// Two concurrent callers for the same path share ONE in-flight request (dedupe).
+// Disabled whenever the admin back office is compiled in (INCLUDE_ADMIN — dev and
+// the admin build) so an editor never sees stale data after a write.
+const CACHE_ENABLED = !INCLUDE_ADMIN;
+
+interface CacheEntry<T> {
+  at: number;
+  value: T;
+}
+const _cache = new Map<string, CacheEntry<unknown>>();
+const _inflight = new Map<string, Promise<unknown>>();
+
+function cachedGet<T>(path: string, ttlMs: number): Promise<T> {
+  if (!CACHE_ENABLED) return request<T>(path);
+
+  const hit = _cache.get(path) as CacheEntry<T> | undefined;
+  if (hit && Date.now() - hit.at < ttlMs) return Promise.resolve(hit.value);
+
+  const pending = _inflight.get(path) as Promise<T> | undefined;
+  if (pending) return pending;
+
+  const p = request<T>(path)
+    .then((value) => {
+      _cache.set(path, { at: Date.now(), value });
+      return value;
+    })
+    .finally(() => {
+      _inflight.delete(path);
+    });
+  _inflight.set(path, p);
+  return p;
+}
+
+/** Drop all cached GET responses (e.g. after a mutation that could change them). */
+export function clearApiCache(): void {
+  _cache.clear();
+}
+
 function qs(params: Record<string, unknown>): string {
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -261,17 +304,27 @@ export interface SpotQuery {
   offset?: number;
 }
 
-export const getSpots = (params: SpotQuery = {}) =>
-  request<SpotSummary[]>(`/spots${qs(params as Record<string, unknown>)}`);
+// Near-static reads are cached (public build only); the TTL bounds staleness if
+// an admin edits data. Live/forecast stay uncached below — they are time-sensitive.
+const SPOTS_TTL_MS = 3 * 60_000;
+const REGIONS_TTL_MS = 10 * 60_000;
 
-export const getSpot = (id: string) => request<SpotRead>(`/spots/${id}`);
+export const getSpots = (params: SpotQuery = {}) =>
+  cachedGet<SpotSummary[]>(
+    `/spots${qs(params as Record<string, unknown>)}`,
+    SPOTS_TTL_MS
+  );
+
+export const getSpot = (id: string) =>
+  cachedGet<SpotRead>(`/spots/${id}`, SPOTS_TTL_MS);
 
 export const getSpotLive = (id: string) =>
   request<LiveConditionsRead>(`/spots/${id}/live`);
 
-export const getRegions = () => request<Region[]>(`/regions`);
+export const getRegions = () => cachedGet<Region[]>(`/regions`, REGIONS_TTL_MS);
 
-export const getRegion = (id: string) => request<Region>(`/regions/${id}`);
+export const getRegion = (id: string) =>
+  cachedGet<Region>(`/regions/${id}`, REGIONS_TTL_MS);
 
 export async function getRegionBySlug(slug: string): Promise<Region | undefined> {
   const regions = await getRegions();
