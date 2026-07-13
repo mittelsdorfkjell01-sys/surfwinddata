@@ -1,9 +1,10 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session, defer
 
+from app.api._http_cache import set_public_cache
 from app.db.session import get_db
 from app.live import service as live_service
 from app.live.cache import Cache
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/spots", tags=["spots"])
 
 @router.get("", response_model=list[SpotSummary])
 def list_spots(
+    response: Response,
     db: Session = Depends(get_db),
     region_id: uuid.UUID | None = Query(default=None),
     status: str | None = Query(default=None),
@@ -65,14 +67,18 @@ def list_spots(
     stmt = stmt.limit(limit).offset(offset)
 
     rows = db.scalars(stmt).all()
+    set_public_cache(response)
     return [SpotSummary.from_orm_spot(s) for s in rows]
 
 
 @router.get("/{spot_id}", response_model=SpotRead)
-def get_spot(spot_id: uuid.UUID, db: Session = Depends(get_db)) -> SpotRead:
+def get_spot(
+    spot_id: uuid.UUID, response: Response, db: Session = Depends(get_db)
+) -> SpotRead:
     spot = db.get(Spot, spot_id)
     if spot is None:
         raise HTTPException(status_code=404, detail="Spot not found")
+    set_public_cache(response)
     return SpotRead.from_orm_spot(spot)
 
 

@@ -1,9 +1,10 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api._http_cache import set_public_cache
 from app.db.session import get_db
 from app.models import Region
 from app.schemas import RegionRead
@@ -14,6 +15,7 @@ router = APIRouter(prefix="/regions", tags=["regions"])
 
 @router.get("", response_model=list[RegionRead])
 def list_regions(
+    response: Response,
     db: Session = Depends(get_db),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
@@ -21,14 +23,18 @@ def list_regions(
     rows = db.scalars(
         select(Region).order_by(Region.name).limit(limit).offset(offset)
     ).all()
+    set_public_cache(response)
     return [RegionRead.from_orm_region(r) for r in rows]
 
 
 @router.get("/{region_id}", response_model=RegionRead)
-def get_region(region_id: uuid.UUID, db: Session = Depends(get_db)) -> RegionRead:
+def get_region(
+    region_id: uuid.UUID, response: Response, db: Session = Depends(get_db)
+) -> RegionRead:
     region = db.get(Region, region_id)
     if region is None:
         raise HTTPException(status_code=404, detail="Region not found")
+    set_public_cache(response)
     return RegionRead.from_orm_region(region)
 
 

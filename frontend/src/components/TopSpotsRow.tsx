@@ -23,7 +23,10 @@ function RowSkeleton() {
  * live fan-out stays bounded and the desktop row stays a single clean line.
  */
 export default function TopSpotsRow() {
-  const { data: spots, loading, error } = useSpots({ status: "published" });
+  const { data: spots, loading, error } = useSpots({
+    status: "published",
+    limit: MAX_TILES,
+  });
   const top = (spots ?? []).slice(0, MAX_TILES);
 
   if (loading) return <RowSkeleton />;
