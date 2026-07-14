@@ -56,6 +56,9 @@ export default {
         label: "0.8125rem", // 13px — control labels, chips, buttons (sm)
         ui: "0.875rem", // 14px — default control/body-UI text
         body: "0.9375rem", // 15px — reading copy
+        // Editorial display scale — fluid hero/section titles (travel-journal).
+        "display-1": ["clamp(2.5rem, 6vw, 5rem)", { lineHeight: "1.02", letterSpacing: "-0.03em" }],
+        "display-2": ["clamp(1.75rem, 3.5vw, 2.75rem)", { lineHeight: "1.08", letterSpacing: "-0.02em" }],
       },
     },
   },

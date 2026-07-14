@@ -94,6 +94,15 @@
   .scrim {
     background-color: rgba(10, 30, 40, 0.32);
   }
+
+  /* Editorial hero fallback — a designed brand colour field for spots/regions
+     without a hero photo (instead of an empty gradient). Paired with an animated
+     wind/wave motif in the EditorialHero component. */
+  .editorial-hero-fallback {
+    background-image:
+      radial-gradient(120% 100% at 15% 0%, rgba(30, 110, 126, 0.55), transparent 60%),
+      linear-gradient(160deg, #13335e 0%, #2c4e7e 55%, #1e6e7e 100%);
+  }
 }
 
 @layer base {
