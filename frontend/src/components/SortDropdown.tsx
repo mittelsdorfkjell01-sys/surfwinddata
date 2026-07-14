@@ -15,33 +15,7 @@ import {
   type FilterState,
   type SortKey,
 } from "../lib/filters";
-
-/** A pill-style toggle used for single- and multi-select filter chips. */
-function Chip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={active}
-      onClick={onClick}
-      className={`rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
-        active
-          ? "bg-navy text-white"
-          : "bg-white text-navy ring-1 ring-navy/15 hover:ring-navy/40"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
+import { Chip } from "./ui";
 
 /**
  * "Sortieren" button that opens a filter + sort panel. Filters by the three

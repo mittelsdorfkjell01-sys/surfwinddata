@@ -20,9 +20,8 @@ import {
 } from "../lib/api";
 import { validateHeroFile } from "../components/ImageUpload";
 import ImageFocalEditor from "../components/ImageFocalEditor";
+import { Button, Input, Textarea } from "../components/ui";
 
-const input =
-  "w-full rounded-xl border border-navy/15 bg-white px-3 py-2 text-[14px] text-navy outline-none focus:border-navy/40";
 const label = "text-[13px] font-medium text-navy";
 const MONTHS_SHORT = [
   "Jan", "Feb", "Mär", "Apr", "Mai", "Jun",
@@ -216,12 +215,12 @@ export default function AdminRegionForm() {
       <form onSubmit={saveFields} className="mt-6 space-y-4">
         <label className="block">
           <span className={label}>Name</span>
-          <input className={`mt-1.5 ${input}`} value={name} onChange={(e) => setName(e.target.value)} />
+          <Input className="mt-1.5" value={name} onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="block">
           <span className={label}>Beschreibung</span>
-          <textarea
-            className={`mt-1.5 ${input} min-h-[120px] resize-y`}
+          <Textarea
+            className="mt-1.5 min-h-[120px] resize-y"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Beschreibung der Region…"
@@ -264,9 +263,9 @@ export default function AdminRegionForm() {
             {error}
           </div>
         )}
-        <button type="submit" disabled={busy} className="rounded-xl bg-navy px-4 py-2 text-[14px] font-medium text-white hover:bg-navy-dark disabled:opacity-50">
+        <Button type="submit" disabled={busy}>
           Speichern
-        </button>
+        </Button>
       </form>
 
       {/* Hero image */}
@@ -285,15 +284,13 @@ export default function AdminRegionForm() {
             </div>
           )}
           <div className="min-w-[240px] flex-1 space-y-2">
-            <input
-              className={input}
+            <Input
               value={imgCredit}
               onChange={(e) => setImgCredit(e.target.value)}
               placeholder="Credit / Urheber (für Upload Pflicht)"
             />
             <div className="flex gap-2">
-              <input
-                className={input}
+              <Input
                 value={imgUrl}
                 onChange={(e) => setImgUrl(e.target.value)}
                 placeholder="Bild-URL setzen"
@@ -387,11 +384,11 @@ export default function AdminRegionForm() {
           {/* Right: pool of all other spots (searchable, draggable) */}
           <div className="rounded-2xl border border-line bg-white p-3">
             <p className="px-1 text-[13px] font-semibold text-navy">Andere Spots</p>
-            <input
+            <Input
+              className="mt-2"
               value={spotSearch}
               onChange={(e) => setSpotSearch(e.target.value)}
               placeholder="Suchen …"
-              className="mt-2 w-full rounded-xl border border-navy/15 bg-white px-3 py-2 text-[14px] text-navy outline-none focus:border-navy/40"
             />
             <div className="mt-2 max-h-[360px] space-y-2 overflow-auto">
               {otherSpots

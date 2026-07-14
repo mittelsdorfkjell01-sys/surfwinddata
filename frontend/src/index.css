@@ -27,6 +27,36 @@
   .label-caps {
     @apply text-[12px] font-medium tracking-[0.18em] text-navy/70 uppercase;
   }
+
+  /* --- Design token: global keyboard focus indicator (WCAG 2.4.7) --------
+     Every interactive element shows a clear teal ring when reached by
+     keyboard (but not on mouse click, thanks to :focus-visible). Form fields
+     opt out here and carry their own focus-visible ring via the ui/Input
+     primitive, so they never render a doubled indicator. Modern browsers clip
+     `outline` to the element's border-radius, so pills and cards get a
+     correctly rounded ring for free. */
+  :where(
+      a[href],
+      button,
+      summary,
+      [role="button"],
+      [role="menuitem"],
+      [role="checkbox"],
+      [tabindex]:not([tabindex="-1"])
+    ):focus-visible {
+    outline: 2px solid theme("colors.brand-teal.DEFAULT");
+    outline-offset: 2px;
+  }
+
+  /* Form fields carry an always-on `outline-none` for mouse users; force a
+     visible outline back on keyboard focus so every input/select/textarea —
+     including admin screens not yet migrated to the ui/Input primitive — stays
+     reachable and clearly focused. `!important` beats the utility's transparent
+     outline; there is no doubled indicator because the field token adds no ring. */
+  :where(input, select, textarea):focus-visible {
+    outline: 2px solid theme("colors.brand-teal.DEFAULT") !important;
+    outline-offset: 1px;
+  }
 }
 
 @layer utilities {

@@ -106,7 +106,7 @@ export default function SearchBar() {
   return (
     <>
       <div ref={barRef} className="relative">
-        <div className="flex items-stretch gap-1 rounded-full bg-white p-2 shadow-card">
+        <div className="flex flex-col gap-1.5 rounded-3xl bg-white p-2 shadow-card sm:flex-row sm:items-stretch sm:gap-1 sm:rounded-full">
           {/* Wohin? — bears the text input */}
           <div
             ref={whereRef}
@@ -129,7 +129,7 @@ export default function SearchBar() {
               placeholder="Region oder Spot suchen"
               aria-label="Wohin?"
               aria-expanded={open === "where"}
-              className="w-full bg-transparent text-[13px] text-navy placeholder:text-muted focus:outline-none"
+              className="w-full rounded-md bg-transparent text-[13px] text-navy outline-none placeholder:text-muted"
             />
           </div>
 
@@ -159,9 +159,10 @@ export default function SearchBar() {
             type="button"
             onClick={submit}
             aria-label="Suchen"
-            className="my-auto ml-1 grid h-12 w-12 shrink-0 place-items-center rounded-full bg-brand-orange text-white transition-colors hover:bg-brand-orange-dark"
+            className="my-auto flex h-12 w-full shrink-0 items-center justify-center gap-2 rounded-full bg-brand-orange text-[15px] font-medium text-white transition-colors hover:bg-brand-orange-dark sm:ml-1 sm:w-12 sm:gap-0"
           >
             <SearchIcon className="text-[20px]" />
+            <span className="sm:hidden">Suchen</span>
           </button>
         </div>
       </div>
@@ -216,7 +217,12 @@ export default function SearchBar() {
                         opacity: { duration: 0.18, ease: "easeOut" },
                       }
                 }
-                style={{ position: "fixed", zIndex: 1150, maxHeight: "70vh" }}
+                style={{
+                  position: "fixed",
+                  zIndex: 1150,
+                  maxHeight: "70vh",
+                  maxWidth: "calc(100vw - 16px)",
+                }}
                 className="overflow-hidden rounded-3xl bg-white shadow-card"
               >
                 <div className="h-full overflow-auto p-6">
@@ -258,7 +264,8 @@ export default function SearchBar() {
 }
 
 function Divider() {
-  return <span className="my-2 w-px self-stretch bg-line" />;
+  // Vertical hairline between segments on desktop; hidden when the bar stacks.
+  return <span className="my-2 hidden w-px self-stretch bg-line sm:block" />;
 }
 
 function Segment({

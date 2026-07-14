@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import Header from "../components/Header";
+import Footer from "../components/Footer";
 import { ErrorBanner, EmptyState } from "../components/AsyncStates";
 import * as api from "../lib/api";
 import { sportLabel } from "../lib/labels";
@@ -45,6 +46,7 @@ export default function SearchResults() {
   const [bestWeeks, setBestWeeks] = useState<api.BestWeeksResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -82,7 +84,7 @@ export default function SearchResults() {
     return () => {
       alive = false;
     };
-  }, [q, sport, week, month, spotId, regionId, placeOpen, placeEntity, timeOpen]);
+  }, [q, sport, week, month, spotId, regionId, placeOpen, placeEntity, timeOpen, retry]);
 
   const monthName = month ? MONTHS[Number(month) - 1] : null;
   const heading = placeOpen
@@ -115,7 +117,9 @@ export default function SearchResults() {
 
         <div className="mt-8">
           {loading && <ResultSkeleton />}
-          {error && !loading && <ErrorBanner message={error} />}
+          {error && !loading && (
+            <ErrorBanner message={error} onRetry={() => setRetry((n) => n + 1)} />
+          )}
           {!loading && !error && result && <SearchHits result={result} />}
           {!loading && !error && bestRegions && (
             <BestRegionsList data={bestRegions} monthName={monthName} />
@@ -125,6 +129,8 @@ export default function SearchResults() {
           )}
         </div>
       </main>
+
+      <Footer />
     </div>
   );
 }
@@ -159,7 +165,10 @@ function SearchHits({ result }: { result: api.SearchResult }) {
 
       {result.spots.length > 0 && (
         <section>
-          <h2 className="mb-3 text-[15px] font-semibold text-navy">Spots</h2>
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h2 className="text-[15px] font-semibold text-navy">Spots</h2>
+            <span className="text-[12px] text-muted">Score 0–100 · höher = besser</span>
+          </div>
           <ul className="space-y-2">
             {result.spots.map((s) => (
               <li key={s.id}>
@@ -174,7 +183,10 @@ function SearchHits({ result }: { result: api.SearchResult }) {
                     </span>
                   </span>
                   {typeof s.score === "number" && (
-                    <span className="shrink-0 text-[12px] text-muted">
+                    <span
+                      className="shrink-0 text-[12px] text-muted"
+                      title="Eignungs-Score für deinen Zeitraum (0–100), höher ist besser"
+                    >
                       Score {Math.round(s.score * 100)}
                     </span>
                   )}
@@ -207,7 +219,8 @@ function BestRegionsList({
     <section>
       <p className="mb-3 text-[14px] text-muted">
         Offene Achse <b>wo</b>: die besten Reviere{" "}
-        {monthName ? `im ${monthName}` : "über die Saison"} — nach Abdeckung.
+        {monthName ? `im ${monthName}` : "über die Saison"} — nach Abdeckung
+        (Anteil der Spots mit fahrbaren Bedingungen).
       </p>
       <ul className="space-y-2">
         {ranking.map((r, i) => (
@@ -220,7 +233,10 @@ function BestRegionsList({
                 {i + 1}. {r.name ?? r.slug}
               </span>
               {typeof r.coverage === "number" && (
-                <span className="text-[13px] text-muted">
+                <span
+                  className="text-[13px] text-muted"
+                  title="Anteil der Spots im Revier mit fahrbaren Bedingungen"
+                >
                   {Math.round(r.coverage * 100)}% Abdeckung
                 </span>
               )}
@@ -266,7 +282,10 @@ function BestWeeksList({
               />
             </span>
             {typeof w.score === "number" && (
-              <span className="w-24 shrink-0 text-right text-[13px] text-muted">
+              <span
+                className="w-24 shrink-0 text-right text-[13px] text-muted"
+                title="Anteil der Zeit mit fahrbaren Bedingungen in dieser Woche"
+              >
                 {Math.round(w.score * 100)}% nutzbar
               </span>
             )}

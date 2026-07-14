@@ -1,206 +1,102 @@
 // Data-loading hooks: fetch from the API, adapt to frontend shapes, and expose
-// { data, loading, error } so every page can render a skeleton / error state
-// instead of a blank screen.
+// { data, loading, error, reload } so every page can render a skeleton / error
+// state instead of a blank screen. Backed by a shared stale-while-revalidate
+// cache (see ./swr): navigating between pages renders cached data instantly and
+// refreshes in the background instead of re-showing a skeleton and re-fetching.
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import type { Spot } from "./types";
 import * as api from "./api";
 import { adaptSpot, adaptSpots } from "./adapt";
+import { useSwr, type SwrState } from "./swr";
 
-export interface AsyncState<T> {
-  data: T | null;
-  loading: boolean;
-  error: string | null;
-}
+// Kept as names for backward-compatible imports; identical shape to SwrState.
+export type AsyncState<T> = SwrState<T>;
+export type AsyncStateReloadable<T> = SwrState<T>;
 
-const errMessage = (e: unknown) =>
-  e instanceof api.ApiError ? e.message : "Unerwarteter Fehler.";
-
-/** Spots (+ their regions), adapted. Re-runs when the query key changes. */
-export function useSpots(query: api.SpotQuery = {}): AsyncState<Spot[]> {
-  const key = JSON.stringify(query);
-  const [state, setState] = useState<AsyncState<Spot[]>>({
-    data: null,
-    loading: true,
-    error: null,
-  });
-
-  useEffect(() => {
-    let alive = true;
-    setState((s) => ({ ...s, loading: true, error: null }));
-    Promise.all([api.getSpots(query), api.getRegions()])
-      .then(([spots, regions]) => {
-        if (!alive) return;
-        const byId = new Map(regions.map((r) => [r.id, r]));
-        setState({ data: adaptSpots(spots, byId), loading: false, error: null });
-      })
-      .catch((e) => {
-        if (!alive) return;
-        setState({ data: null, loading: false, error: errMessage(e) });
-      });
-    return () => {
-      alive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
-
-  return state;
+/** Spots (+ their regions), adapted. Regions come from the shared cache, so a
+ *  spot list never re-fetches the region catalogue from scratch. */
+export function useSpots(query: api.SpotQuery = {}): AsyncStateReloadable<Spot[]> {
+  const spots = useSwr(`spots:${JSON.stringify(query)}`, () => api.getSpots(query));
+  const regions = useRegions();
+  const data = useMemo(() => {
+    if (!spots.data || !regions.data) return null;
+    const byId = new Map(regions.data.map((r) => [r.id, r]));
+    return adaptSpots(spots.data, byId);
+  }, [spots.data, regions.data]);
+  return {
+    data,
+    loading: spots.loading || regions.loading,
+    error: spots.error ?? regions.error,
+    reload: () => {
+      spots.reload();
+      regions.reload();
+    },
+  };
 }
 
 /** A single spot (full record) + its region, adapted. */
-export function useSpot(id?: string): AsyncState<Spot> {
-  const [state, setState] = useState<AsyncState<Spot>>({
-    data: null,
-    loading: true,
-    error: null,
-  });
-
-  useEffect(() => {
-    if (!id) return;
-    let alive = true;
-    setState({ data: null, loading: true, error: null });
-    api
-      .getSpot(id)
-      .then(async (spot) => {
-        let region: api.Region | undefined;
-        try {
-          region = await api.getRegion(spot.region_id);
-        } catch {
-          /* region is optional decoration */
-        }
-        if (!alive) return;
-        setState({ data: adaptSpot(spot, region), loading: false, error: null });
-      })
-      .catch((e) => {
-        if (!alive) return;
-        setState({ data: null, loading: false, error: errMessage(e) });
-      });
-    return () => {
-      alive = false;
-    };
-  }, [id]);
-
-  return state;
+export function useSpot(id?: string): AsyncStateReloadable<Spot> {
+  const spot = useSwr(id ? `spot:${id}` : null, () => api.getSpot(id!));
+  const regionId = spot.data?.region_id;
+  const region = useSwr(
+    regionId ? `region:${regionId}` : null,
+    () => api.getRegion(regionId!)
+  );
+  const data = useMemo(
+    () => (spot.data ? adaptSpot(spot.data, region.data ?? undefined) : null),
+    [spot.data, region.data]
+  );
+  return {
+    data,
+    loading: spot.loading,
+    error: spot.error,
+    reload: () => {
+      spot.reload();
+      region.reload();
+    },
+  };
 }
 
 /** Live conditions for a spot (best-effort; failure is non-fatal). */
-export function useSpotLive(id?: string): AsyncState<api.LiveConditionsRead> {
-  const [state, setState] = useState<AsyncState<api.LiveConditionsRead>>({
-    data: null,
-    loading: true,
-    error: null,
-  });
+export function useSpotLive(id?: string): AsyncStateReloadable<api.LiveConditionsRead> {
+  return useSwr(id ? `live:${id}` : null, () => api.getSpotLive(id!));
+}
 
-  useEffect(() => {
-    if (!id) return;
-    let alive = true;
-    setState({ data: null, loading: true, error: null });
-    api
-      .getSpotLive(id)
-      .then((d) => alive && setState({ data: d, loading: false, error: null }))
-      .catch(
-        (e) =>
-          alive && setState({ data: null, loading: false, error: errMessage(e) })
-      );
-    return () => {
-      alive = false;
-    };
-  }, [id]);
-
-  return state;
+/** Batch live conditions for several spots → Map by spot_id. One request for the
+ *  whole set instead of one per tile (bounded fan-out). Best-effort. */
+export function useSpotsLive(
+  ids: string[]
+): AsyncStateReloadable<Map<string, api.LiveConditionsRead>> {
+  // Sort for a stable cache key regardless of input order.
+  const key = ids.length ? `live-batch:${[...ids].sort().join(",")}` : null;
+  const state = useSwr(key, () => api.getSpotsLive(ids));
+  const data = useMemo(
+    () => (state.data ? new Map(state.data.map((d) => [d.spot_id, d])) : null),
+    [state.data]
+  );
+  return { data, loading: state.loading, error: state.error, reload: state.reload };
 }
 
 /** 7-day forecast for a spot (best-effort; failure is non-fatal). */
-export function useSpotForecast(id?: string): AsyncState<api.ForecastSeries> {
-  const [state, setState] = useState<AsyncState<api.ForecastSeries>>({
-    data: null,
-    loading: true,
-    error: null,
-  });
-  useEffect(() => {
-    if (!id) return;
-    let alive = true;
-    setState({ data: null, loading: true, error: null });
-    api
-      .getSpotForecast(id)
-      .then((d) => alive && setState({ data: d, loading: false, error: null }))
-      .catch(
-        (e) => alive && setState({ data: null, loading: false, error: errMessage(e) })
-      );
-    return () => {
-      alive = false;
-    };
-  }, [id]);
-  return state;
+export function useSpotForecast(id?: string): AsyncStateReloadable<api.ForecastSeries> {
+  return useSwr(id ? `forecast:${id}` : null, () => api.getSpotForecast(id!));
 }
 
 /** Region season aggregate (52 weeks). Best-effort. */
-export function useRegionSeason(id?: string): AsyncState<api.RegionSeasonResponse> {
-  const [state, setState] = useState<AsyncState<api.RegionSeasonResponse>>({
-    data: null,
-    loading: true,
-    error: null,
-  });
-  useEffect(() => {
-    if (!id) return;
-    let alive = true;
-    setState({ data: null, loading: true, error: null });
-    api
-      .getRegionSeason(id)
-      .then((d) => alive && setState({ data: d, loading: false, error: null }))
-      .catch(
-        (e) => alive && setState({ data: null, loading: false, error: errMessage(e) })
-      );
-    return () => {
-      alive = false;
-    };
-  }, [id]);
-  return state;
+export function useRegionSeason(id?: string): AsyncStateReloadable<api.RegionSeasonResponse> {
+  return useSwr(id ? `region-season:${id}` : null, () => api.getRegionSeason(id!));
 }
 
 /** Open time: the best weeks for a region. Best-effort. */
-export function useBestWeeks(regionId?: string): AsyncState<api.BestWeeksResponse> {
-  const [state, setState] = useState<AsyncState<api.BestWeeksResponse>>({
-    data: null,
-    loading: true,
-    error: null,
-  });
-  useEffect(() => {
-    if (!regionId) return;
-    let alive = true;
-    setState({ data: null, loading: true, error: null });
-    api
-      .getBestWeeks({ region_id: regionId })
-      .then((d) => alive && setState({ data: d, loading: false, error: null }))
-      .catch(
-        (e) => alive && setState({ data: null, loading: false, error: errMessage(e) })
-      );
-    return () => {
-      alive = false;
-    };
-  }, [regionId]);
-  return state;
+export function useBestWeeks(regionId?: string): AsyncStateReloadable<api.BestWeeksResponse> {
+  return useSwr(
+    regionId ? `best-weeks:${regionId}` : null,
+    () => api.getBestWeeks({ region_id: regionId! })
+  );
 }
 
-/** All regions (raw backend records). */
-export function useRegions(): AsyncState<api.Region[]> {
-  const [state, setState] = useState<AsyncState<api.Region[]>>({
-    data: null,
-    loading: true,
-    error: null,
-  });
-  useEffect(() => {
-    let alive = true;
-    api
-      .getRegions()
-      .then((d) => alive && setState({ data: d, loading: false, error: null }))
-      .catch(
-        (e) =>
-          alive && setState({ data: null, loading: false, error: errMessage(e) })
-      );
-    return () => {
-      alive = false;
-    };
-  }, []);
-  return state;
+/** All regions (raw backend records), cached once and shared app-wide. */
+export function useRegions(): AsyncStateReloadable<api.Region[]> {
+  return useSwr("regions", () => api.getRegions());
 }

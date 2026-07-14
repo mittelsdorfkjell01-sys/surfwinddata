@@ -24,7 +24,10 @@ export function ErrorBanner({
   onRetry?: () => void;
 }) {
   return (
-    <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-[14px] text-red-700">
+    <div
+      role="alert"
+      className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-[14px] text-red-700"
+    >
       <p className="font-medium">Daten konnten nicht geladen werden.</p>
       <p className="mt-1 text-red-600/90">{message}</p>
       {onRetry && (

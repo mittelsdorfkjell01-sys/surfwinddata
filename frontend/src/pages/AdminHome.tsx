@@ -45,7 +45,12 @@ export default function AdminHome() {
       </div>
     );
   }
-  if (!data) return <div className="text-[14px] text-muted">Lädt…</div>;
+  if (!data)
+    return (
+      <div role="status" className="text-[14px] text-muted">
+        Lädt…
+      </div>
+    );
 
   const review = data.review ?? {};
   const reportedTotal = REPORTED.reduce((n, r) => n + (review[r.key] ?? 0), 0);

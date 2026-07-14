@@ -66,3 +66,56 @@ def test_live_endpoint_404_for_unknown_spot(client, fake_live):
 
     resp = client.get(f"/spots/{uuid.uuid4()}/live")
     assert resp.status_code == 404
+
+
+# --- batch live endpoint (replaces the per-tile fan-out) --------------------
+
+
+@pytest.fixture
+def seeded_spot_ids(db):
+    seed(db)
+    spots = db.scalars(select(Spot).order_by(Spot.name).limit(3)).all()
+    return [str(s.id) for s in spots]
+
+
+def test_live_batch_returns_all_requested(client, seeded_spot_ids, fake_live):
+    want = seeded_spot_ids[:2]
+    resp = client.get("/spots/live", params={"ids": ",".join(want)})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert isinstance(body, list)
+    assert {item["spot_id"] for item in body} == set(want)
+    for item in body:
+        assert item["model"]
+        assert "wind" in item["current"]
+
+
+def test_live_batch_precedes_uuid_route(client, seeded_spot_ids, fake_live):
+    # /spots/live must win over /spots/{spot_id}; a list (not a single object).
+    resp = client.get("/spots/live", params={"ids": seeded_spot_ids[0]})
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+def test_live_batch_skips_unknown_and_malformed(client, seeded_spot_ids, fake_live):
+    import uuid
+
+    ids = f"{seeded_spot_ids[0]},{uuid.uuid4()},not-a-uuid"
+    resp = client.get("/spots/live", params={"ids": ids})
+    assert resp.status_code == 200
+    assert [i["spot_id"] for i in resp.json()] == [seeded_spot_ids[0]]
+
+
+def test_live_batch_dedupes_ids(client, seeded_spot_ids, fake_live):
+    one = seeded_spot_ids[0]
+    resp = client.get("/spots/live", params={"ids": f"{one},{one}"})
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+
+
+def test_live_batch_caps_count(client, fake_live):
+    import uuid
+
+    ids = ",".join(str(uuid.uuid4()) for _ in range(21))
+    resp = client.get("/spots/live", params={"ids": ids})
+    assert resp.status_code == 400

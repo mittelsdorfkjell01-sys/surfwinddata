@@ -46,6 +46,17 @@ export default {
         "2xl": "1rem",
         "3xl": "1.5rem",
       },
+      // Semantic type scale — the app's recurring UI text steps as tokens
+      // (single source of truth). Font-size only, so values match the previously
+      // hard-coded `text-[Npx]` exactly; adopting them is visually a no-op while
+      // making sizes semantic and consistent. New UI text should prefer these
+      // over arbitrary pixel values.
+      fontSize: {
+        caption: "0.75rem", // 12px — captions, meta, legends
+        label: "0.8125rem", // 13px — control labels, chips, buttons (sm)
+        ui: "0.875rem", // 14px — default control/body-UI text
+        body: "0.9375rem", // 15px — reading copy
+      },
     },
   },
   plugins: [],

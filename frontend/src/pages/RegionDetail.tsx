@@ -8,6 +8,7 @@ import MapSpotCard from "../components/MapSpotCard";
 import RegionSeason from "../components/RegionSeason";
 import SimilarRegions from "../components/SimilarRegions";
 import SortDropdown from "../components/SortDropdown";
+import Footer from "../components/Footer";
 import { EmptyState, ErrorBanner, SpotGridSkeleton } from "../components/AsyncStates";
 import type { RegionInfo } from "../lib/types";
 import { useRegions, useSpots, useRegionSeason, useBestWeeks } from "../lib/hooks";
@@ -40,12 +41,22 @@ export default function RegionDetail() {
   const setFilters = (next: FilterState) =>
     setSearchParams(filtersToSearchParams(next), { replace: true });
 
-  const { data: regions, loading: regionsLoading, error: regionsError } = useRegions();
+  const {
+    data: regions,
+    loading: regionsLoading,
+    error: regionsError,
+    reload: reloadRegions,
+  } = useRegions();
   const backendRegion = useMemo(
     () => regions?.find((r) => r.slug === slug),
     [regions, slug]
   );
-  const { data: spots, loading: spotsLoading, error: spotsError } = useSpots(
+  const {
+    data: spots,
+    loading: spotsLoading,
+    error: spotsError,
+    reload: reloadSpots,
+  } = useSpots(
     backendRegion ? { region_id: backendRegion.id, status: "published" } : {}
   );
   const { data: seasonRaw } = useRegionSeason(backendRegion?.id);
@@ -92,7 +103,13 @@ export default function RegionDetail() {
       <div className="relative min-h-screen bg-white">
         <LandingHeader />
         <div className="mx-auto max-w-[1400px] px-4 pt-32 sm:px-8">
-          <ErrorBanner message={error} />
+          <ErrorBanner
+            message={error}
+            onRetry={() => {
+              reloadRegions();
+              reloadSpots();
+            }}
+          />
         </div>
       </div>
     );
@@ -127,6 +144,7 @@ export default function RegionDetail() {
     <div className="relative min-h-screen bg-white">
       <LandingHeader />
 
+      <main>
       {/* Hero */}
       <section className="relative">
         <div className="relative h-[68vh] min-h-[560px] w-full overflow-hidden bg-navy-soft">
@@ -253,6 +271,9 @@ export default function RegionDetail() {
           <SimilarRegions region={region} />
         </div>
       </div>
+      </main>
+
+      <Footer />
     </div>
   );
 }

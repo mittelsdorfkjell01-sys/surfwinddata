@@ -19,6 +19,7 @@ import {
   type TeamNote,
 } from "../lib/api";
 import { ROLE_LABELS, gapLabel, roleLabel } from "../lib/labels";
+import { Button, Input, Select } from "../components/ui";
 
 const ROLES: AdminRole[] = ["admin", "curator"];
 
@@ -89,7 +90,10 @@ export default function AdminUsers() {
         </p>
 
         {notice && (
-          <div className="mt-4 rounded-xl bg-brand-green/10 px-3 py-2 text-[13px] font-medium text-brand-green">
+          <div
+            role="status"
+            className="mt-4 rounded-xl bg-brand-green/10 px-3 py-2 text-[13px] font-medium text-brand-green"
+          >
             {notice}
           </div>
         )}
@@ -240,19 +244,14 @@ function TeamBoard() {
         Nachrichten fürs Team — erscheinen als Kacheln auf der Übersicht.
       </p>
       <form onSubmit={submit} className="mt-3 flex gap-2">
-        <input
+        <Input
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="Nachricht fürs Team…"
-          className="w-full rounded-xl border border-navy/15 bg-white px-3 py-2 text-[14px] text-navy outline-none focus:border-navy/40"
         />
-        <button
-          type="submit"
-          disabled={busy || !body.trim()}
-          className="shrink-0 rounded-xl bg-navy px-4 py-2 text-[13px] font-medium text-white hover:bg-navy-dark disabled:opacity-50"
-        >
+        <Button type="submit" disabled={busy || !body.trim()} className="shrink-0">
           Posten
-        </button>
+        </Button>
       </form>
       {error && <p className="mt-2 text-[13px] text-red-600">{error}</p>}
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -332,9 +331,6 @@ function CreateUserForm({
   const [role, setRole] = useState<AdminRole>("curator");
   const [busy, setBusy] = useState(false);
 
-  const inputCls =
-    "w-full rounded-xl border border-navy/15 bg-white px-3 py-2 text-[14px] text-navy outline-none focus:border-navy/40";
-
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -365,36 +361,32 @@ function CreateUserForm({
     >
       <p className="text-[14px] font-semibold text-navy">Neuen Benutzer anlegen</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <input
+        <Input
           type="email"
           placeholder="E-Mail"
           autoComplete="off"
-          className={inputCls}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
         />
-        <input
+        <Input
           type="text"
           placeholder="Anzeigename (optional)"
-          className={inputCls}
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
         />
-        <input
+        <Input
           type="password"
           placeholder="Passwort"
           autoComplete="new-password"
-          className={inputCls}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
         />
         <div className="flex gap-2">
-          <select
+          <Select
             value={role}
             onChange={(e) => setRole(e.target.value as AdminRole)}
-            className={inputCls}
             aria-label="Rolle"
           >
             {ROLES.map((r) => (
@@ -402,14 +394,10 @@ function CreateUserForm({
                 {ROLE_LABELS[r]}
               </option>
             ))}
-          </select>
-          <button
-            type="submit"
-            disabled={busy || !email || !password}
-            className="shrink-0 rounded-xl bg-navy px-4 py-2 text-[13px] font-medium text-white hover:bg-navy-dark disabled:opacity-50"
-          >
+          </Select>
+          <Button type="submit" disabled={busy || !email || !password} className="shrink-0">
             {busy ? "…" : "Anlegen"}
-          </button>
+          </Button>
         </div>
       </div>
     </form>

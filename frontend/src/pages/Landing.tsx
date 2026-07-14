@@ -2,6 +2,7 @@ import LandingHeader from "../components/LandingHeader";
 import HeroImage from "../components/HeroImage";
 import SearchBar from "../components/SearchBar";
 import TopSpotsRow from "../components/TopSpotsRow";
+import Footer from "../components/Footer";
 
 /**
  * "surfwind data" landing (Frame_1/5): one full-bleed hero photo carrying the
@@ -26,7 +27,10 @@ export default function Landing() {
 
       <LandingHeader />
 
-      <div className="flex min-h-screen flex-col">
+      <main className="flex min-h-screen flex-col">
+        <h1 className="sr-only">
+          surfwind data — die beste Sammlung von Surf- und Windspots
+        </h1>
         {/* Search — upper middle. z-[1200] keeps the bar above its scrim. */}
         <div className="flex flex-1 items-center justify-center px-4 pt-24 sm:px-6">
           <div className="relative z-[1200] w-full max-w-[960px]">
@@ -42,7 +46,9 @@ export default function Landing() {
           </h2>
           <TopSpotsRow />
         </div>
-      </div>
+      </main>
+
+      <Footer />
     </div>
   );
 }

@@ -13,6 +13,11 @@ import MapView from "./pages/MapView";
 import SpotDetail from "./pages/SpotDetail";
 import RegionDetail from "./pages/RegionDetail";
 import SearchResults from "./pages/SearchResults";
+import Impressum from "./pages/Impressum";
+import Datenschutz from "./pages/Datenschutz";
+import NotFound from "./pages/NotFound";
+import ErrorBoundary from "./components/ErrorBoundary";
+import RouteError from "./components/RouteError";
 import { ADMIN_DEPLOY, INCLUDE_ADMIN } from "./lib/target";
 
 // The admin back office is code-split behind a build flag: the public build
@@ -29,19 +34,27 @@ async function bootstrap() {
     { path: "/search", element: <SearchResults /> },
     { path: "/spot/:id", element: <SpotDetail /> },
     { path: "/region/:slug", element: <RegionDetail /> },
+    { path: "/impressum", element: <Impressum /> },
+    { path: "/datenschutz", element: <Datenschutz /> },
   ];
 
   if (INCLUDE_ADMIN) {
     routes.push(...(await import("./adminRoutes")).default);
   }
 
-  // Unknown paths — including /admin on the public build — fall back home.
-  routes.push({ path: "*", element: <Navigate to="/" replace /> });
+  // Unknown paths (including /admin on the public build, where the admin routes
+  // aren't registered) render a real 404 instead of a silent redirect home.
+  routes.push({ path: "*", element: <NotFound /> });
+
+  // Every route gets a render-error fallback instead of a blank screen.
+  for (const r of routes) if (!r.errorElement) r.errorElement = <RouteError />;
 
   const router = createBrowserRouter(routes);
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
-      <RouterProvider router={router} />
+      <ErrorBoundary>
+        <RouterProvider router={router} />
+      </ErrorBoundary>
     </React.StrictMode>
   );
 }

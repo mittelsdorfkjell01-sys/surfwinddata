@@ -10,6 +10,7 @@ import {
   setRegionStockImage,
   type AdminRegionEntry,
 } from "../lib/api";
+import { Button, Input } from "../components/ui";
 
 export default function AdminRegions() {
   const [entries, setEntries] = useState<AdminRegionEntry[]>([]);
@@ -62,7 +63,10 @@ export default function AdminRegions() {
       </p>
 
       {notice && (
-        <div className="mt-4 rounded-xl bg-brand-green/10 px-3 py-2 text-[13px] font-medium text-brand-green">
+        <div
+          role="status"
+          className="mt-4 rounded-xl bg-brand-green/10 px-3 py-2 text-[13px] font-medium text-brand-green"
+        >
           {notice}
         </div>
       )}
@@ -177,9 +181,6 @@ function CreateRegionForm({
   const [country, setCountry] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const inputCls =
-    "w-full rounded-xl border border-navy/15 bg-white px-3 py-2 text-[14px] text-navy outline-none focus:border-navy/40";
-
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -207,26 +208,22 @@ function CreateRegionForm({
         Namen bestimmt.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <input
-          className={`${inputCls} min-w-[220px] flex-1`}
+        <Input
+          className="min-w-[220px] flex-1"
           placeholder="Name (z. B. Sardinien)"
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
         />
-        <input
-          className={`${inputCls} w-40`}
+        <Input
+          className="w-40"
           placeholder="Land (z. B. IT)"
           value={country}
           onChange={(e) => setCountry(e.target.value)}
         />
-        <button
-          type="submit"
-          disabled={busy || !name.trim()}
-          className="shrink-0 rounded-xl bg-navy px-5 py-2 text-[13px] font-medium text-white hover:bg-navy-dark disabled:opacity-50"
-        >
+        <Button type="submit" disabled={busy || !name.trim()} className="shrink-0">
           {busy ? "Suche…" : "Anlegen"}
-        </button>
+        </Button>
       </div>
     </form>
   );

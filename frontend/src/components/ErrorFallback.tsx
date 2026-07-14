@@ -1,0 +1,35 @@
+import { Button, Wordmark } from "./ui";
+
+/**
+ * Presentational error screen shared by the router error page and the top-level
+ * ErrorBoundary. Uses plain <a> (not <Link>) so it renders safely even outside
+ * a Router context (the class boundary wraps the RouterProvider itself).
+ */
+export default function ErrorFallback({
+  title = "Etwas ist schiefgelaufen",
+  detail = "Es ist ein unerwarteter Fehler aufgetreten.",
+}: {
+  title?: string;
+  detail?: string;
+}) {
+  return (
+    <div className="grid min-h-screen place-items-center bg-cream px-6 text-center">
+      <div>
+        <a href="/" aria-label="surfwind data — Startseite" className="mb-6 inline-block">
+          <Wordmark size="lg" />
+        </a>
+        <h1 className="text-[22px] font-semibold text-navy">{title}</h1>
+        <p className="mx-auto mt-2 max-w-sm text-[14px] text-muted">{detail}</p>
+        <div className="mt-6 flex justify-center gap-3">
+          <Button onClick={() => window.location.reload()}>Neu laden</Button>
+          <a
+            href="/"
+            className="inline-flex items-center rounded-xl border border-navy/20 bg-white px-4 py-2 text-[14px] font-medium text-navy hover:bg-navy/5"
+          >
+            Zur Startseite
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}

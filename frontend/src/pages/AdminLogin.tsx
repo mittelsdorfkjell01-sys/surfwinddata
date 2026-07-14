@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { ApiError } from "../lib/api";
+import { Wordmark } from "../components/ui";
 
 export default function AdminLogin() {
   const { login, user } = useAuth();
@@ -46,11 +47,8 @@ export default function AdminLogin() {
   return (
     <div className="grid min-h-screen place-items-center bg-cream px-4">
       <div className="w-full max-w-sm">
-        <Link
-          to="/"
-          className="mb-6 block text-center text-2xl font-bold tracking-tight text-navy"
-        >
-          SpotInfo
+        <Link to="/" className="mb-6 flex justify-center">
+          <Wordmark size="lg" />
         </Link>
         <form
           onSubmit={onSubmit}

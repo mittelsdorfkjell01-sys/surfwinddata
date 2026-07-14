@@ -118,7 +118,7 @@ function Ratings({ spotId }: { spotId: string }) {
         )}
       </div>
 
-      {error && <p className="mt-2 text-[13px] text-red-600">{error}</p>}
+      {error && <p role="alert" className="mt-2 text-[13px] text-red-600">{error}</p>}
 
       {/* Form opens only on demand */}
       {open && (
@@ -241,7 +241,7 @@ function RatingForm({
         required
       />
       <Honeypot value={website} onChange={setWebsite} />
-      {error && <p className="mt-2 text-[13px] text-red-600">{error}</p>}
+      {error && <p role="alert" className="mt-2 text-[13px] text-red-600">{error}</p>}
       <div className="mt-3 flex gap-2">
         <button type="submit" disabled={busy || !conditions.trim()} className={primaryBtn}>
           {busy ? "Senden…" : "Bewertung abgeben"}
@@ -330,7 +330,7 @@ function Tips({ spotId }: { spotId: string }) {
             required
           />
           <Honeypot value={website} onChange={setWebsite} />
-          {error && <p className="mt-2 text-[13px] text-red-600">{error}</p>}
+          {error && <p role="alert" className="mt-2 text-[13px] text-red-600">{error}</p>}
           <div className="mt-3 flex gap-2">
             <button type="submit" disabled={busy || !body.trim()} className={primaryBtn}>
               {busy ? "Senden…" : "Tipp teilen"}
@@ -456,7 +456,7 @@ function ReportDialog({
         </button>
       </div>
       {contact !== null ? (
-        <p className="mt-2 text-[13px] text-brand-green">
+        <p role="status" className="mt-2 text-[13px] text-brand-green">
           Danke, deine Meldung ist eingegangen.
           {contact && <> Bei dringenden Rechtefragen: {contact}</>}
         </p>
@@ -474,7 +474,7 @@ function ReportDialog({
             className={`mt-2 ${input}`}
             rows={2}
           />
-          {error && <p className="mt-2 text-[13px] text-red-600">{error}</p>}
+          {error && <p role="alert" className="mt-2 text-[13px] text-red-600">{error}</p>}
           <button type="button" disabled={busy} onClick={submit} className={`mt-3 ${primaryBtn}`}>
             {busy ? "Senden…" : "Melden"}
           </button>
@@ -610,8 +610,8 @@ function UploadForm({
       )}
 
       <Honeypot value={website} onChange={setWebsite} />
-      {error && <p className="mt-2 text-[13px] text-red-600">{error}</p>}
-      {notice && <p className="mt-2 text-[13px] text-brand-green">{notice}</p>}
+      {error && <p role="alert" className="mt-2 text-[13px] text-red-600">{error}</p>}
+      {notice && <p role="status" className="mt-2 text-[13px] text-brand-green">{notice}</p>}
       <button type="submit" disabled={busy || !file || !accepted} className={`mt-3 ${primaryBtn}`}>
         {busy ? "Hochladen…" : "Hochladen"}
       </button>

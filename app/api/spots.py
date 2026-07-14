@@ -71,6 +71,47 @@ def list_spots(
     return [SpotSummary.from_orm_spot(s) for s in rows]
 
 
+@router.get("/live", response_model=list[LiveConditionsRead], tags=["live"])
+def get_spots_live_batch(
+    ids: str = Query(..., description="Comma-separated spot UUIDs (max 20)"),
+    db: Session = Depends(get_db),
+    client: OpenMeteoClient = Depends(get_om_client),
+    cache: Cache = Depends(get_cache),
+) -> list[LiveConditionsRead]:
+    """Current conditions for several spots in one call — replaces the per-tile
+    fan-out on the landing/map views (one round-trip instead of N).
+
+    Declared before ``/{spot_id}`` so the literal ``/spots/live`` wins over the
+    UUID path. Unknown or malformed ids are skipped rather than failing the whole
+    batch; duplicates are de-duplicated; the count is capped to keep per-request
+    work bounded. Each item carries its ``spot_id`` so the client can map results.
+    """
+    tokens = [t.strip() for t in ids.split(",") if t.strip()]
+    if not tokens:
+        return []
+    if len(tokens) > 20:
+        raise HTTPException(status_code=400, detail="Too many ids (max 20)")
+
+    out: list[LiveConditionsRead] = []
+    seen: set[str] = set()
+    for token in tokens:
+        if token in seen:
+            continue
+        seen.add(token)
+        try:
+            spot_id = uuid.UUID(token)
+        except ValueError:
+            continue
+        try:
+            data = live_service.get_live_conditions(
+                spot_id, db=db, client=client, cache=cache
+            )
+        except LookupError:
+            continue
+        out.append(LiveConditionsRead.model_validate(data))
+    return out
+
+
 @router.get("/{spot_id}", response_model=SpotRead)
 def get_spot(
     spot_id: uuid.UUID, response: Response, db: Session = Depends(get_db)

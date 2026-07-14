@@ -30,6 +30,7 @@ import {
   styleLabel,
   waterCharacterLabel,
 } from "../lib/labels";
+import { Chip, Field, fieldClass as inputCls } from "../components/ui";
 
 const SPORTS = ["kitesurf", "windsurf", "wing", "surf"] as const;
 type Availability = "yes" | "no" | "unknown";
@@ -43,58 +44,6 @@ const slugify = (s: string) =>
     .replace(/ß/g, "ss")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
-
-// --- small form controls ---------------------------------------------------
-
-function Field({
-  label,
-  children,
-  hint,
-  error,
-}: {
-  label: string;
-  children: React.ReactNode;
-  hint?: string;
-  error?: string;
-}) {
-  return (
-    <label className="block">
-      <span className="text-[13px] font-medium text-navy">{label}</span>
-      <div className="mt-1.5">{children}</div>
-      {hint && !error && <p className="mt-1 text-[12px] text-muted">{hint}</p>}
-      {error && <p className="mt-1 text-[12px] font-medium text-red-600">{error}</p>}
-    </label>
-  );
-}
-
-const inputCls =
-  "w-full rounded-xl border border-navy/15 bg-white px-3 py-2 text-[14px] text-navy outline-none focus:border-navy/40";
-
-function Chip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={active}
-      onClick={onClick}
-      className={`rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
-        active
-          ? "bg-navy text-white"
-          : "bg-white text-navy ring-1 ring-navy/15 hover:ring-navy/40"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
 
 // --- page ------------------------------------------------------------------
 

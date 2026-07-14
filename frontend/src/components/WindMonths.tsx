@@ -15,7 +15,26 @@ export default function WindMonths({ data }: { data: MonthWind[] }) {
         <span className="text-[12px] text-muted">Ø Wind pro Woche · kts</span>
       </div>
 
-      <div className="mt-5 flex h-44 items-end gap-2 sm:gap-3">
+      {/* Screen-reader alternative to the bar chart (WCAG 1.1.1). */}
+      <table className="sr-only">
+        <caption>Windmonate — durchschnittlicher Wind pro Woche in Knoten</caption>
+        <thead>
+          <tr>
+            <th scope="col">Monat</th>
+            <th scope="col">Ø Wind (kts)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((m) => (
+            <tr key={m.month}>
+              <td>{m.month}</td>
+              <td>{(m.weeks.reduce((a, b) => a + b, 0) / m.weeks.length).toFixed(1)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div aria-hidden="true" className="mt-5 flex h-44 items-end gap-2 sm:gap-3">
         {data.map((m) => {
           const monthMean = m.weeks.reduce((a, b) => a + b, 0) / m.weeks.length;
           const strong = monthMean >= max * 0.72;

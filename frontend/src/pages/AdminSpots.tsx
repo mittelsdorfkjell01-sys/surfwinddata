@@ -196,7 +196,10 @@ export default function AdminSpots() {
       </div>
 
       {notice && (
-        <div className="mt-4 rounded-xl bg-brand-green/10 px-3 py-2 text-[13px] font-medium text-brand-green">
+        <div
+          role="status"
+          className="mt-4 rounded-xl bg-brand-green/10 px-3 py-2 text-[13px] font-medium text-brand-green"
+        >
           {notice}
         </div>
       )}

@@ -50,6 +50,7 @@ export default function MapView() {
   return (
     <div className="relative h-screen w-screen overflow-hidden">
       <Header />
+      <h1 className="sr-only">Spot-Karte</h1>
 
       <MapContainer
         key={withCoords.length ? "loaded" : "init"}

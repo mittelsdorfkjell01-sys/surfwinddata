@@ -47,17 +47,47 @@ export default function Forecast({ days }: { days: ForecastDay[] }) {
         </button>
       </div>
 
-      <div className="grid min-h-[240px] flex-1 grid-cols-4 gap-2 sm:grid-cols-7">
+      {/* Screen-reader alternative to the forecast strip (WCAG 1.1.1). */}
+      <table className="sr-only">
+        <caption>Wind- und Wellenvorhersage für 7 Tage</caption>
+        <thead>
+          <tr>
+            <th scope="col">Tag</th>
+            <th scope="col">Wind ({windUnit})</th>
+            <th scope="col">Welle (m)</th>
+            <th scope="col">Bedingungen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {days.map((d) => (
+            <tr key={d.day}>
+              <td>{d.day}</td>
+              <td>{wind(d.wind)}</td>
+              <td>{wave(d.wave)}</td>
+              <td>{d.good ? "gut" : "mäßig"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div
+        aria-hidden="true"
+        className="grid min-h-[240px] flex-1 grid-cols-4 gap-2 sm:grid-cols-7"
+      >
         {days.map((d) => (
           <div key={d.day} className="flex flex-col items-center justify-between rounded-xl bg-navy/10 px-1 py-3">
             <span className="text-[11px] font-semibold tracking-wide text-muted">{d.day}</span>
 
             <div className="flex items-baseline gap-1">
+              {/* Shape (filled dot vs. hollow ring) carries the meaning, not just
+                  colour — WCAG 1.4.1. */}
               <span
-                className={`inline-block h-1.5 w-1.5 translate-y-[-1px] rounded-full ${
-                  d.good ? "bg-dot" : "bg-line"
+                aria-hidden="true"
+                className={`inline-block h-2 w-2 translate-y-[-1px] rounded-full ${
+                  d.good ? "bg-dot" : "border border-muted bg-transparent"
                 }`}
               />
+              {d.good && <span className="sr-only">gute Bedingungen</span>}
               <span className="text-[15px] font-semibold text-navy">{wind(d.wind)}</span>
               <span className="text-[10px] font-medium text-navy/60">{windUnit}</span>
             </div>

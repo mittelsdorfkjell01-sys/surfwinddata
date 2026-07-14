@@ -1,4 +1,4 @@
-import { useSpots } from "../lib/hooks";
+import { useSpots, useSpotsLive } from "../lib/hooks";
 import SpotTile from "./SpotTile";
 import { ErrorBanner } from "./AsyncStates";
 
@@ -23,14 +23,21 @@ function RowSkeleton() {
  * live fan-out stays bounded and the desktop row stays a single clean line.
  */
 export default function TopSpotsRow() {
-  const { data: spots, loading, error } = useSpots({
+  const { data: spots, loading, error, reload } = useSpots({
     status: "published",
     limit: MAX_TILES,
   });
   const top = (spots ?? []).slice(0, MAX_TILES);
+  // One batch request for the whole row's live conditions (instead of per tile).
+  const { data: liveMap } = useSpotsLive(top.map((s) => s.uuid ?? s.id));
 
   if (loading) return <RowSkeleton />;
-  if (error) return <div className="px-4 sm:px-10"><ErrorBanner message={error} /></div>;
+  if (error)
+    return (
+      <div className="px-4 sm:px-10">
+        <ErrorBanner message={error} onRetry={reload} />
+      </div>
+    );
   if (top.length === 0) return null;
 
   return (
@@ -41,7 +48,7 @@ export default function TopSpotsRow() {
           className="animate-fade-up"
           style={{ animationDelay: `${Math.min(i, 8) * 60}ms` }}
         >
-          <SpotTile spot={spot} />
+          <SpotTile spot={spot} live={liveMap?.get(spot.uuid ?? spot.id) ?? null} />
         </div>
       ))}
     </div>

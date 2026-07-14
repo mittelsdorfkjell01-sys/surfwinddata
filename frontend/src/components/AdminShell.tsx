@@ -5,6 +5,7 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { roleLabel } from "../lib/labels";
 import type { AdminRole } from "../lib/api";
+import { Wordmark } from "./ui";
 
 interface NavItem {
   to: string;
@@ -43,12 +44,8 @@ export default function AdminShell() {
       <div className="mx-auto flex max-w-[1400px]">
         {/* Sidebar (desktop) */}
         <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-line bg-white px-4 py-6 md:flex">
-          <Link
-            to="/admin"
-            className="px-2 text-xl font-bold tracking-tight text-navy"
-          >
-            SpotInfo
-            <span className="ml-1 text-[12px] font-medium text-muted">Admin</span>
+          <Link to="/admin" className="px-2">
+            <Wordmark size="md" tag="Admin" />
           </Link>
           <nav className="mt-8 flex flex-col gap-1">
             {items.map((n) => (
@@ -63,11 +60,8 @@ export default function AdminShell() {
         <div className="min-w-0 flex-1">
           <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-line bg-white/90 px-4 py-3 backdrop-blur sm:px-8">
             {/* Mobile brand */}
-            <Link
-              to="/admin"
-              className="text-lg font-bold tracking-tight text-navy md:hidden"
-            >
-              SpotInfo <span className="text-[12px] text-muted">Admin</span>
+            <Link to="/admin" className="md:hidden">
+              <Wordmark size="sm" tag="Admin" />
             </Link>
             <div className="hidden md:block" />
             {user && (

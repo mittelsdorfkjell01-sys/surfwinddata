@@ -144,7 +144,7 @@ export default function SearchWhen({
                 type="button"
                 onClick={() => setAnchor(addMonth(anchor, -1))}
                 aria-label="Vorheriger Monat"
-                className={`grid h-7 w-7 place-items-center rounded-full text-navy transition-colors hover:bg-cream ${idx === 0 ? "" : "invisible"}`}
+                className={`grid h-9 w-9 place-items-center rounded-full text-navy transition-colors hover:bg-cream ${idx === 0 ? "" : "invisible"}`}
               >
                 <ChevL className="text-[16px]" />
               </button>
@@ -155,7 +155,7 @@ export default function SearchWhen({
                 type="button"
                 onClick={() => setAnchor(addMonth(anchor, 1))}
                 aria-label="Nächster Monat"
-                className={`grid h-7 w-7 place-items-center rounded-full text-navy transition-colors hover:bg-cream ${idx === months.length - 1 ? "" : "invisible"}`}
+                className={`grid h-9 w-9 place-items-center rounded-full text-navy transition-colors hover:bg-cream ${idx === months.length - 1 ? "" : "invisible"}`}
               >
                 <ChevR className="text-[16px]" />
               </button>
@@ -172,7 +172,7 @@ export default function SearchWhen({
                     key={i}
                     type="button"
                     onClick={() => clickDay(d)}
-                    className={`mx-auto grid h-8 w-8 place-items-center rounded-full text-[12px] transition-colors ${
+                    className={`mx-auto grid h-10 w-10 place-items-center rounded-full text-[13px] transition-colors ${
                       isEdge(d)
                         ? "bg-brand-orange text-white"
                         : inRange(d)

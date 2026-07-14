@@ -11,6 +11,7 @@ import Forecast from "../components/Forecast";
 import WindMonths from "../components/WindMonths";
 import SimilarSpots from "../components/SimilarSpots";
 import SpotCommunity from "../components/SpotCommunity";
+import Footer from "../components/Footer";
 import { ErrorBanner, EmptyState } from "../components/AsyncStates";
 import { ChevronDownIcon } from "../lib/icons";
 import { regionSlug } from "../lib/types";
@@ -25,7 +26,7 @@ import {
 export default function SpotDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { data: spot, loading, error } = useSpot(id);
+  const { data: spot, loading, error, reload } = useSpot(id);
   const { data: live } = useSpotLive(id);
   const { data: forecast, loading: forecastLoading, error: forecastError } =
     useSpotForecast(id);
@@ -50,7 +51,11 @@ export default function SpotDetail() {
       <div className="grid min-h-screen place-items-center bg-white px-6 text-center">
         <div>
           <h1 className="text-2xl font-semibold text-navy">Spot nicht gefunden</h1>
-          {error && <div className="mt-4 max-w-md"><ErrorBanner message={error} /></div>}
+          {error && (
+            <div className="mt-4 max-w-md">
+              <ErrorBanner message={error} onRetry={reload} />
+            </div>
+          )}
           <Link to="/" className="mt-4 inline-block text-[15px] text-navy underline">
             Zurück zur Übersicht
           </Link>
@@ -86,6 +91,7 @@ export default function SpotDetail() {
     <div className="relative min-h-screen bg-white">
       <LandingHeader />
 
+      <main>
       {/* ── Hero: full-bleed image with the spot card floating ON it (as in the PNG) ── */}
       <section className="relative">
         <div className="relative h-[64vh] min-h-[520px] w-full overflow-hidden bg-navy-soft">
@@ -233,6 +239,9 @@ export default function SpotDetail() {
           <SimilarSpots spot={spot} />
         </div>
       </div>
+      </main>
+
+      <Footer />
     </div>
   );
 }
