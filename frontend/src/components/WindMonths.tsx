@@ -11,7 +11,7 @@ export default function WindMonths({ data }: { data: MonthWind[] }) {
   return (
     <div>
       <div className="mb-1 flex items-baseline justify-between">
-        <h2 className="text-[15px] font-semibold text-navy">Windmonate</h2>
+        <h3 className="text-[15px] font-semibold text-navy">Windmonate</h3>
         <span className="text-[12px] text-muted">Ø Wind pro Woche · kts</span>
       </div>
 

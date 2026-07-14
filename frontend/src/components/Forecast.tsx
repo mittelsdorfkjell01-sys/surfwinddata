@@ -33,9 +33,9 @@ export default function Forecast({ days }: { days: ForecastDay[] }) {
   return (
     <div className="flex h-full flex-col">
       <div className="mb-5 flex items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-navy">
+        <h3 className="flex items-center gap-2 text-[15px] font-semibold text-navy">
           <span className="text-[18px]">💨</span> Wind &amp; Welle — 7 Tage
-        </h2>
+        </h3>
 
         <button
           type="button"
