@@ -27,6 +27,18 @@ export function resolveMediaUrl(url?: string | null): string | undefined {
   return url;
 }
 
+/** Seed rows carry an unreachable `*.local` sentinel host. */
+const SENTINEL_HOST = /^https?:\/\/[^/]+\.local\b/i;
+
+/**
+ * Resolve a media URL, but report unreachable seed sentinels as absent so
+ * callers render their designed no-image state instead of a broken <img>.
+ */
+export function usableMediaUrl(url?: string | null): string | undefined {
+  const resolved = resolveMediaUrl(url);
+  return resolved && !SENTINEL_HOST.test(resolved) ? resolved : undefined;
+}
+
 // --- backend shapes --------------------------------------------------------
 
 export interface GeoPoint {

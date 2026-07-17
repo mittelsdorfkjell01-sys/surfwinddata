@@ -9,8 +9,10 @@ import RegionSeason from "../components/RegionSeason";
 import SimilarRegions from "../components/SimilarRegions";
 import SortDropdown from "../components/SortDropdown";
 import Footer from "../components/Footer";
+import { EditorialHero, SectionBand, Lede } from "../components/editorial";
 import { EmptyState, ErrorBanner, SpotGridSkeleton } from "../components/AsyncStates";
 import type { RegionInfo } from "../lib/types";
+import { usableMediaUrl } from "../lib/api";
 import { useRegions, useSpots, useRegionSeason, useBestWeeks } from "../lib/hooks";
 import { regionSeasonToView } from "../lib/seasonView";
 import {
@@ -90,7 +92,8 @@ export default function RegionDetail() {
     return (
       <div className="relative min-h-screen bg-white">
         <LandingHeader />
-        <div className="mx-auto max-w-[1400px] px-4 pt-32 sm:px-8">
+        <div className="h-[72vh] min-h-[560px] w-full animate-pulse bg-navy-soft" />
+        <div className="mx-auto max-w-[1180px] px-4 pt-16 sm:px-8">
           <div className="mb-10 h-8 w-64 animate-pulse rounded bg-line" />
           <SpotGridSkeleton />
         </div>
@@ -102,7 +105,7 @@ export default function RegionDetail() {
     return (
       <div className="relative min-h-screen bg-white">
         <LandingHeader />
-        <div className="mx-auto max-w-[1400px] px-4 pt-32 sm:px-8">
+        <div className="mx-auto max-w-[1180px] px-4 pt-32 sm:px-8">
           <ErrorBanner
             message={error}
             onRetry={() => {
@@ -136,118 +139,119 @@ export default function RegionDetail() {
     ? regionSeasonToView(seasonRaw, region.spots.length)
     : null;
   const bestWeeks = (bestWeeksRaw?.weeks ?? []).slice(0, 8);
-  const heroImage = region.spots[0]?.image;
+
+  // Hero source, in order: the region's own image → the first spot's image →
+  // EditorialHero's designed fallback. The focal point only travels with the
+  // region image.
+  const regionImage = usableMediaUrl(backendRegion.image?.url);
+  const heroImage = regionImage ?? usableMediaUrl(region.spots[0]?.image);
+  const heroFocal = regionImage ? backendRegion.image?.focal ?? null : null;
+
   const withCoords = region.spots.filter((s) => s.coords);
   const gridSpots = sortSpots(filterSpots(region.spots, filters), filters.sort);
+  const spotCount = `${region.spots.length} ${
+    region.spots.length === 1 ? "Spot" : "Spots"
+  } in der Region`;
 
   return (
     <div className="relative min-h-screen bg-white">
       <LandingHeader />
 
       <main>
-      {/* Hero */}
-      <section className="relative">
-        <div className="relative h-[68vh] min-h-[560px] w-full overflow-hidden bg-navy-soft">
-          {heroImage ? (
-            <img src={heroImage} alt={region.name} className="h-full w-full object-cover" />
-          ) : (
-            <div className="h-full w-full bg-navy-soft" />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-black/20" />
-          <div className="absolute inset-x-0 bottom-0">
-            <div className="mx-auto max-w-[1400px] px-4 pb-8 sm:px-8">
-              <p className="text-[13px] font-medium text-white/90">{region.country}</p>
-              <h1 className="mt-1 text-[34px] font-semibold leading-tight text-white drop-shadow sm:text-[44px]">
-                {region.name}
-              </h1>
-              <p className="mt-1 text-[15px] text-white/90">
-                {region.spots.length} {region.spots.length === 1 ? "Spot" : "Spots"} in der Region
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
+        <EditorialHero
+          image={heroImage}
+          focal={heroFocal}
+          alt={region.name}
+          kicker={region.country || undefined}
+          title={region.name}
+          meta={spotCount}
+        />
 
-      {/* Body — same width as the other pages */}
-      <div className="mx-auto max-w-[1400px] px-4 pb-24 pt-16 sm:px-8">
         {/* Breadcrumb */}
-        <nav className="mb-6 text-[13px] font-medium text-navy/70">
-          <Link to="/" className="hover:underline">Übersicht</Link>
-          {region.country && <span className="mx-1.5 text-muted">›</span>}
-          {region.country && <span>{region.country}</span>}
-          <span className="mx-1.5 text-muted">›</span>
-          <span className="text-brand-teal">{region.name}</span>
-        </nav>
-
-        {/* Über die Region + beste Monate (daneben) */}
-        <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-2">
-          <div>
-            <h2 className="mb-3 text-[15px] font-semibold text-navy">Über die Region</h2>
-            <p className="text-[15px] leading-relaxed text-navy/75">
-              {description || (
-                <span className="text-muted">Noch keine Beschreibung hinterlegt.</span>
-              )}
-            </p>
-
-            {/* Offene Zeit: beste Wochen (falls Klimatologie vorliegt) */}
-            {bestWeeks.length > 0 && (
-              <div className="mt-6">
-                <h3 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-muted">
-                  Beste Wochen
-                </h3>
-                <div className="flex flex-wrap gap-1.5">
-                  {bestWeeks.map((w) => (
-                    <span
-                      key={w.week}
-                      className="inline-flex items-center rounded-full bg-brand-teal/10 px-2.5 py-1 text-[12px] font-medium text-brand-teal"
-                      title={`Score ${Math.round((w.score ?? 0) * 100)} · ${w.spots_working ?? 0} Spots`}
-                    >
-                      KW {w.week}
-                    </span>
-                  ))}
-                </div>
-              </div>
+        <div className="mx-auto max-w-[1180px] px-4 pt-6 sm:px-8">
+          <nav className="text-[13px] font-medium text-navy/60">
+            <Link to="/" className="hover:underline">
+              Übersicht
+            </Link>
+            {region.country && (
+              <>
+                <span className="mx-1.5 text-muted">›</span>
+                <span>{region.country}</span>
+              </>
             )}
-          </div>
+            <span className="mx-1.5 text-muted">›</span>
+            <span className="text-brand-teal">{region.name}</span>
+          </nav>
+        </div>
+
+        {/* Lede */}
+        <SectionBand tone="white">
+          <Lede>{description}</Lede>
+        </SectionBand>
+
+        {/* Reisezeit — best weeks and the season curve read as one answer */}
+        <SectionBand tone="cream" heading="Wann hinfahren">
           {seasonView ? (
             <RegionSeason season={seasonView.season} bestMonths={seasonView.bestMonths} />
           ) : (
-            <div className="rounded-3xl bg-cream px-5 py-10 text-center text-[13px] text-muted">
+            <p className="text-[15px] text-muted">
               Noch keine Saison-Daten für diese Region (Klimatologie fehlt).
+            </p>
+          )}
+
+          {bestWeeks.length > 0 && (
+            <div className="mt-10 border-t border-line pt-6">
+              <h3 className="text-caption uppercase tracking-[0.14em] text-muted">
+                Beste Wochen
+              </h3>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {bestWeeks.map((w) => (
+                  <span
+                    key={w.week}
+                    className="inline-flex items-center rounded-full bg-brand-teal/10 px-2.5 py-1 text-[12px] font-medium text-brand-teal"
+                    title={`Score ${Math.round((w.score ?? 0) * 100)} · ${
+                      w.spots_working ?? 0
+                    } Spots`}
+                  >
+                    KW {w.week}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
-        </div>
+        </SectionBand>
 
-        {/* Spots in der Region — direkt darunter */}
-        <div className="mt-14">
-          <div className="flex items-center justify-between border-b border-line/70 pb-4">
-            <h2 className="text-[15px] font-medium text-navy">Spots in {region.name}</h2>
+        {/* Die Spots */}
+        <SectionBand tone="white">
+          <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line/70 pb-5">
+            <h2 className="text-display-2 font-semibold text-navy text-balance">
+              Die Spots
+            </h2>
             <SortDropdown value={filters} onChange={setFilters} />
           </div>
           {gridSpots.length === 0 ? (
-            <div className="mt-6">
+            <div className="mt-8">
               <EmptyState message="Keine Spots für diese Auswahl." />
             </div>
           ) : (
-            <div className="mt-6 grid grid-cols-1 gap-x-6 gap-y-9 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+            <div className="mt-8 grid grid-cols-1 gap-x-7 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
               {gridSpots.map((spot) => (
-                <SpotCard key={spot.id} spot={spot} />
+                <SpotCard key={spot.id} spot={spot} variant="editorial" />
               ))}
             </div>
           )}
-        </div>
+        </SectionBand>
 
-        {/* Übersichtskarte */}
+        {/* Auf der Karte */}
         {withCoords.length > 0 && (
-          <div className="mt-14">
-            <h2 className="mb-5 text-[15px] font-semibold text-navy">Spots auf der Karte</h2>
+          <SectionBand tone="cream" heading="Auf der Karte">
             <div className="overflow-hidden rounded-3xl shadow-card">
               <MapContainer
                 center={region.center}
                 zoom={7}
                 zoomControl={false}
                 scrollWheelZoom
-                className="h-[300px] w-full sm:h-[380px]"
+                className="h-[300px] w-full sm:h-[420px]"
               >
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
@@ -263,14 +267,13 @@ export default function RegionDetail() {
                 ))}
               </MapContainer>
             </div>
-          </div>
+          </SectionBand>
         )}
 
         {/* Ähnliche Regionen */}
-        <div className="mt-20">
+        <SectionBand tone="white">
           <SimilarRegions region={region} />
-        </div>
-      </div>
+        </SectionBand>
       </main>
 
       <Footer />

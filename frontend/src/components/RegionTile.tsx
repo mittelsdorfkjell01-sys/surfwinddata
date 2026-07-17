@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import SpotImage from "./SpotImage";
+import { usableMediaUrl } from "../lib/api";
 
 // One-letter month ticks for the wind-months strip (Jan … Dez).
 const MONTH_INITIALS = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
@@ -33,9 +34,7 @@ export default function RegionTile({
   /** Best wind months as 1..12 numbers (region.season.best_months). */
   windMonths?: number[] | null;
 }) {
-  // Seed rows carry an unreachable `*.local` sentinel host; treat those as absent
-  // so the branded SpotImage fallback field renders instead.
-  const usable = image && !/^https?:\/\/[^/]+\.local\b/i.test(image) ? image : undefined;
+  const usable = usableMediaUrl(image);
   const pct = typeof coverage === "number" ? Math.round(coverage * 100) : null;
   const months = windMonths ?? [];
   const to = slug ? `/region/${slug}` : "#";
