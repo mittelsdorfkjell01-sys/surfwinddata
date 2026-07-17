@@ -37,6 +37,27 @@ def test_cache_key_rounds_coordinates():
     )
 
 
+def test_redis_cache_fails_open_when_redis_is_down():
+    """A Redis outage must degrade to a miss / no-op, not raise — the live path
+    is meant to fetch fresh, not 500, when the cache is unavailable."""
+    import redis
+
+    from app.live.cache import RedisCache
+
+    cache = RedisCache.__new__(RedisCache)  # skip real connection
+
+    class _DeadRedis:
+        def get(self, key):
+            raise redis.ConnectionError("boom")
+
+        def set(self, key, value, ex=None):
+            raise redis.ConnectionError("boom")
+
+    cache._r = _DeadRedis()
+    assert cache.get("om:x") is None  # reported as a miss
+    cache.set("om:x", {"a": 1}, ttl=10)  # swallowed, no raise
+
+
 # --- confidence staffing ---------------------------------------------------
 
 def test_confidence_for_day_tiers():

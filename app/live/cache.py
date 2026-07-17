@@ -9,9 +9,12 @@ within the 30-60 min band the live path targets).
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Protocol
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TTL_SECONDS = 1800  # 30 min
 
@@ -27,19 +30,37 @@ class Cache(Protocol):
 
 
 class RedisCache:
-    """JSON-over-Redis cache."""
+    """JSON-over-Redis cache.
+
+    Fail-open: Redis is a non-critical accelerator here (the same stance the
+    /health check takes — a dead cache is "degraded", not fatal). If Redis is
+    unreachable or slow, a ``get`` reports a miss and a ``set`` is dropped, so the
+    live path just fetches fresh from Open-Meteo instead of 500-ing the request.
+    Short socket timeouts keep a hung Redis from blocking the call.
+    """
 
     def __init__(self, url: str | None = None) -> None:
         import redis
 
-        self._r = redis.Redis.from_url(url or get_settings().redis_url)
+        self._r = redis.Redis.from_url(
+            url or get_settings().redis_url,
+            socket_connect_timeout=1,
+            socket_timeout=1,
+        )
 
     def get(self, key: str) -> Any | None:
-        raw = self._r.get(key)
+        try:
+            raw = self._r.get(key)
+        except Exception as exc:  # redis.RedisError + socket errors
+            logger.warning("live cache get failed (%s) — treating as miss", exc)
+            return None
         return json.loads(raw) if raw is not None else None
 
     def set(self, key: str, value: Any, ttl: int = DEFAULT_TTL_SECONDS) -> None:
-        self._r.set(key, json.dumps(value), ex=ttl)
+        try:
+            self._r.set(key, json.dumps(value), ex=ttl)
+        except Exception as exc:  # redis.RedisError + socket errors
+            logger.warning("live cache set failed (%s) — skipping cache", exc)
 
 
 class InMemoryCache:
