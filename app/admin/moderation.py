@@ -152,8 +152,58 @@ def _rating_view(r: SpotRating) -> dict:
 
 # --- submissions -----------------------------------------------------------
 
-def approve_submission(db: Session, submission_id, *, actor: str, client=None) -> Any:
-    """Create a **draft** spot from the proposal and link it back."""
+class IncompleteSubmissionError(ValueError):
+    """The proposal (plus any admin completion) is not yet a valid spot — e.g. a
+    name-only account submission approved without region/coordinates. Carries a
+    human message naming the missing/invalid fields (→ 422 at the API)."""
+
+
+# Submission-payload field → operator-facing German label, for error messages.
+_FIELD_LABELS = {
+    "name": "Name",
+    "region_id": "Region",
+    "lat": "Breitengrad",
+    "lon": "Längengrad",
+    "sports": "Sportarten",
+    "level": "Level",
+    "water_character": "Wassercharakter",
+    "style": "Stil",
+    "facilities": "Ausstattung",
+    "facing": "Ausrichtung",
+}
+
+
+def _incomplete_message(exc: Any) -> str:
+    """Turn a pydantic ValidationError into 'Zum Anlegen fehlen oder sind
+    ungültig: Region, Koordinaten.' rather than a raw error dump."""
+    fields: list[str] = []
+    for err in exc.errors():
+        loc = err.get("loc") or ()
+        key = str(loc[0]) if loc else ""
+        label = _FIELD_LABELS.get(key, key or "Feld")
+        if label not in fields:
+            fields.append(label)
+    joined = ", ".join(fields) if fields else "Pflichtangaben"
+    return f"Zum Anlegen fehlen oder sind ungültig: {joined}."
+
+
+def approve_submission(
+    db: Session,
+    submission_id,
+    *,
+    actor: str,
+    client=None,
+    completion: dict | None = None,
+) -> Any:
+    """Create a **draft** spot from the proposal and link it back.
+
+    ``completion`` lets an admin fill in fields the submitter did not provide
+    (a name-only account proposal has just ``name``). It is merged **over** the
+    stored payload, then the result must be a valid :class:`SpotCreate`; if not,
+    an :class:`IncompleteSubmissionError` names what is still missing.
+    """
+    from pydantic import ValidationError
+
     from app.schemas.admin import SpotCreate
 
     sub = db.get(SpotSubmission, submission_id)
@@ -162,7 +212,11 @@ def approve_submission(db: Session, submission_id, *, actor: str, client=None) -
     if sub.status != "pending":
         raise ValueError(f"submission already {sub.status}")
 
-    data = SpotCreate.model_validate(sub.payload).to_data()
+    merged = {**(sub.payload or {}), **(completion or {})}
+    try:
+        data = SpotCreate.model_validate(merged).to_data()
+    except ValidationError as exc:
+        raise IncompleteSubmissionError(_incomplete_message(exc)) from exc
     spot = admin_spots.create_spot(data, db=db, client=client, actor=actor)
 
     sub.status = "merged"

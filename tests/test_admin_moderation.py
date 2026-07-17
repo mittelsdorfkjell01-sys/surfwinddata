@@ -120,6 +120,58 @@ def test_submission_approve_creates_draft_spot(client, anon_client, spot_id, db)
     assert _audit_count(db, "submission", "submission_approve") >= 1
 
 
+def test_name_only_submission_needs_completion_then_approves(client, spot_id, db):
+    """A name-only account proposal can't approve as-is (missing region/coords);
+    once the admin supplies them it becomes a draft spot, keeping the proposed
+    name and taking region + sports from the completion."""
+    _, region_id = spot_id
+    sub = SpotSubmission(
+        payload={"name": "Nur ein Name"}, submitter_name="Gast", status="pending"
+    )
+    db.add(sub)
+    db.commit()
+    sid = str(sub.id)
+
+    # no completion → 422 naming what's missing
+    r0 = client.post(f"/admin/submissions/{sid}/approve")
+    assert r0.status_code == 422, r0.text
+    assert "Region" in r0.json()["detail"]
+
+    # region only, still no coordinates → still 422
+    r1 = client.post(f"/admin/submissions/{sid}/approve", json={"region_id": region_id})
+    assert r1.status_code == 422
+
+    # region + coordinates (+ sports) → draft spot
+    ok = client.post(f"/admin/submissions/{sid}/approve", json={
+        "region_id": region_id, "lat": 54.6, "lon": 10.4, "sports": ["wing"],
+    })
+    assert ok.status_code == 201, ok.text
+    new_id = ok.json()["spot_id"]
+    assert ok.json()["status"] == "draft"
+
+    db.expire_all()
+    spot = db.get(Spot, uuid.UUID(new_id))
+    assert spot.name == "Nur ein Name"        # kept from the proposal
+    assert str(spot.region_id) == region_id   # from the completion
+    assert spot.sports == ["wing"]            # from the completion
+    merged = db.get(SpotSubmission, uuid.UUID(sid))
+    assert merged.status == "merged"
+    assert str(merged.resulting_spot_id) == new_id
+
+
+def test_already_decided_submission_conflicts(client, spot_id, db):
+    """A submission that was already merged/rejected → 409, not 422."""
+    _, region_id = spot_id
+    sub = SpotSubmission(
+        payload={"name": "Schon weg", "region_id": region_id, "lat": 54.5, "lon": 10.3},
+        submitter_name="Gast", status="rejected",
+    )
+    db.add(sub)
+    db.commit()
+    resp = client.post(f"/admin/submissions/{sub.id}/approve")
+    assert resp.status_code == 409, resp.text
+
+
 def test_submission_reject_sets_status_and_note(client, anon_client, spot_id, db):
     _, region_id = spot_id
     sub_id = anon_client.post("/submissions", json={

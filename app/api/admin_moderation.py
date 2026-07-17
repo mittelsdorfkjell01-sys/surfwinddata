@@ -17,6 +17,25 @@ from app.admin.deps import get_extract_client
 from app.auth.deps import get_actor, require_role
 from app.db.session import get_db
 
+
+class SubmissionApprove(BaseModel):
+    """Fields an admin fills in at approval time to complete a proposal that did
+    not carry them (a name-only account submission). Merged over the stored
+    payload before validation; all optional so a full community submission
+    approves with an empty body, exactly as before."""
+
+    region_id: uuid.UUID | None = None
+    lat: float | None = None
+    lon: float | None = None
+    sports: list[str] | None = None
+
+    def completion(self) -> dict:
+        # Only the fields actually provided — never overwrite the payload with nulls.
+        data = self.model_dump(exclude_none=True)
+        if "region_id" in data:
+            data["region_id"] = str(data["region_id"])
+        return data
+
 router = APIRouter(
     prefix="/admin",
     tags=["moderation"],
@@ -38,16 +57,21 @@ def review_queue(db: Session = Depends(get_db)) -> dict:
 @router.post("/submissions/{submission_id}/approve", status_code=201)
 def approve_submission(
     submission_id: uuid.UUID,
+    body: SubmissionApprove | None = None,
     db: Session = Depends(get_db),
     actor: str = Depends(get_actor),
     client=Depends(get_extract_client),
 ) -> dict:
+    completion = body.completion() if body else {}
     try:
         spot = moderation.approve_submission(
-            db, submission_id, actor=actor, client=client
+            db, submission_id, actor=actor, client=client, completion=completion
         )
     except LookupError:
         raise HTTPException(status_code=404, detail="Einreichung nicht gefunden.")
+    except moderation.IncompleteSubmissionError as exc:
+        # Missing/invalid fields the admin still needs to supply.
+        raise HTTPException(status_code=422, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     return {"spot_id": str(spot.id), "status": spot.status}
