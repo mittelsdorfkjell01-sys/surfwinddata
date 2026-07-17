@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { MenuIcon, UserIcon } from "../lib/icons";
+import { useAuth } from "../context/AuthContext";
 
-// Account entries with no feature behind them yet are shown as disabled "bald"
-// (coming-soon) rows — never a silently-dead click. Utility links point at real
-// routes.
-const SOON = ["Profil", "Favoriten", "hinzugefügte Spots", "Kontoeinstellungen"];
+const ACCOUNT_LINKS: { label: string; to: string }[] = [
+  { label: "Profil", to: "/konto/profil" },
+  { label: "Favoriten", to: "/konto/favoriten" },
+  { label: "Hinzugefügte Spots", to: "/konto/spots" },
+  { label: "Kontoeinstellungen", to: "/konto/einstellungen" },
+];
 const UTILITY: { label: string; to: string }[] = [
   { label: "Impressum", to: "/impressum" },
   { label: "Datenschutz", to: "/datenschutz" },
@@ -14,6 +17,8 @@ const UTILITY: { label: string; to: string }[] = [
 
 /** Account pill + dropdown, shared by the landing and map/search headers. */
 export default function AccountMenu() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
@@ -31,6 +36,15 @@ export default function AccountMenu() {
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
+
+  const onLogout = async () => {
+    setOpen(false);
+    await logout();
+    navigate("/");
+  };
+
+  const linkClass =
+    "block rounded-xl px-3 py-2.5 text-[14px] font-medium text-navy transition-colors hover:bg-cream";
 
   return (
     <div ref={ref} className="relative">
@@ -59,21 +73,59 @@ export default function AccountMenu() {
             transition={{ duration: 0.15, ease: "easeOut" }}
             className="absolute right-0 top-[calc(100%+10px)] w-60 rounded-2xl bg-white p-2 shadow-card"
           >
-            {SOON.map((label) => (
-              <button
-                key={label}
-                type="button"
-                role="menuitem"
-                disabled
-                aria-disabled="true"
-                className="flex w-full cursor-not-allowed items-center justify-between rounded-xl px-3 py-2.5 text-left text-[14px] font-medium text-muted"
-              >
-                {label}
-                <span className="rounded-full bg-line px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
-                  bald
-                </span>
-              </button>
-            ))}
+            {user ? (
+              <>
+                <div className="px-3 pb-2 pt-1">
+                  <p className="truncate text-[14px] font-semibold text-navy">
+                    {user.displayName}
+                  </p>
+                  <p className="truncate text-[12px] text-muted">{user.email}</p>
+                </div>
+                <div className="border-t border-line pt-1">
+                  {ACCOUNT_LINKS.map((item) => (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      role="menuitem"
+                      onClick={() => setOpen(false)}
+                      className={linkClass}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+                <div className="mt-1 border-t border-line pt-1">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={onLogout}
+                    className="block w-full rounded-xl px-3 py-2.5 text-left text-[14px] font-medium text-brand-teal transition-colors hover:bg-cream"
+                  >
+                    Abmelden
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/anmelden"
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                  className={linkClass}
+                >
+                  Anmelden
+                </Link>
+                <Link
+                  to="/anmelden?mode=register"
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                  className="mb-1 block rounded-xl bg-navy px-3 py-2.5 text-[14px] font-medium text-white transition-colors hover:bg-navy-dark"
+                >
+                  Konto erstellen
+                </Link>
+              </>
+            )}
+
             <div className="mt-1 border-t border-line pt-1">
               {UTILITY.map((item) => (
                 <Link

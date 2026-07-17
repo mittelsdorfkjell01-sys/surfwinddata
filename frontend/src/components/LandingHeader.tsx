@@ -9,8 +9,8 @@ import AccountMenu from "./AccountMenu";
  * Transparent over the hero: caps tagline (left), wordmark (centre), the map
  * link, the "Füge Spots hinzu" link (admin build) and the shared account menu.
  *
- * Deliberately separate from the shared `Header.tsx` (which MapView reuses with
- * its SportToggle).
+ * Deliberately separate from the shared `Header.tsx` (which the map and search
+ * pages reuse with a centred brand).
  */
 export default function LandingHeader() {
   const location = useLocation();

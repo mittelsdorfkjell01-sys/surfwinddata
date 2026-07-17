@@ -5,6 +5,7 @@ import Footer from "../components/Footer";
 import { ErrorBanner, EmptyState } from "../components/AsyncStates";
 import * as api from "../lib/api";
 import { sportLabel } from "../lib/labels";
+import RegionTile from "../components/RegionTile";
 
 const MONTHS = [
   "Januar", "Februar", "März", "April", "Mai", "Juni",
@@ -43,6 +44,7 @@ export default function SearchResults() {
 
   const [result, setResult] = useState<api.SearchResult | null>(null);
   const [bestRegions, setBestRegions] = useState<api.BestRegionsResponse | null>(null);
+  const [regionMeta, setRegionMeta] = useState<Map<string, api.Region>>(new Map());
   const [bestWeeks, setBestWeeks] = useState<api.BestWeeksResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,14 +56,22 @@ export default function SearchResults() {
     setError(null);
     setResult(null);
     setBestRegions(null);
+    setRegionMeta(new Map());
     setBestWeeks(null);
 
     let run: Promise<unknown>;
     if (placeOpen) {
-      // WO offen → beste Reviere (für den Monat, sonst die Saison)
-      run = api
-        .getBestRegions({ sport, month: month ? Number(month) : undefined })
-        .then((r) => alive && setBestRegions(r));
+      // WO offen → beste Reviere (für den Monat, sonst die Saison). Regionen-
+      // Stammdaten (Bild/Land) parallel laden und per id zuordnen, damit die
+      // Kacheln denselben Look wie der Rest der Seite bekommen.
+      run = Promise.all([
+        api.getBestRegions({ sport, month: month ? Number(month) : undefined }),
+        api.getRegions(),
+      ]).then(([r, regions]) => {
+        if (!alive) return;
+        setBestRegions(r);
+        setRegionMeta(new Map(regions.map((x) => [x.id, x])));
+      });
     } else if (placeEntity && timeOpen) {
       // Ort fix + WANN offen → beste Wochen für diesen Ort
       run = api
@@ -122,7 +132,7 @@ export default function SearchResults() {
           )}
           {!loading && !error && result && <SearchHits result={result} />}
           {!loading && !error && bestRegions && (
-            <BestRegionsList data={bestRegions} monthName={monthName} />
+            <BestRegionsList data={bestRegions} monthName={monthName} meta={regionMeta} />
           )}
           {!loading && !error && bestWeeks && (
             <BestWeeksList data={bestWeeks} place={q} />
@@ -203,9 +213,11 @@ function SearchHits({ result }: { result: api.SearchResult }) {
 function BestRegionsList({
   data,
   monthName,
+  meta,
 }: {
   data: api.BestRegionsResponse;
   monthName: string | null;
+  meta: Map<string, api.Region>;
 }) {
   const ranking = (data.regions ?? []).filter(
     (r) => (r.coverage ?? 0) > 0 || (r.intensity ?? 0) > 0
@@ -217,33 +229,33 @@ function BestRegionsList({
   }
   return (
     <section>
-      <p className="mb-3 text-[14px] text-muted">
+      <p className="mb-5 text-[14px] text-muted">
         Offene Achse <b>wo</b>: die besten Reviere{" "}
         {monthName ? `im ${monthName}` : "über die Saison"} — nach Abdeckung
         (Anteil der Spots mit fahrbaren Bedingungen).
       </p>
-      <ul className="space-y-2">
-        {ranking.map((r, i) => (
-          <li key={r.id ?? r.slug ?? i}>
-            <Link
-              to={r.slug ? `/region/${r.slug}` : "#"}
-              className="flex items-center justify-between rounded-xl bg-[#F1F5FA] px-4 py-3 hover:bg-navy/[0.06]"
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {ranking.map((r, i) => {
+          const m = r.id ? meta.get(r.id) : undefined;
+          return (
+            <div
+              key={r.id ?? r.slug ?? i}
+              className="animate-fade-up"
+              style={{ animationDelay: `${Math.min(i, 8) * 60}ms` }}
             >
-              <span className="font-medium text-navy">
-                {i + 1}. {r.name ?? r.slug}
-              </span>
-              {typeof r.coverage === "number" && (
-                <span
-                  className="text-[13px] text-muted"
-                  title="Anteil der Spots im Revier mit fahrbaren Bedingungen"
-                >
-                  {Math.round(r.coverage * 100)}% Abdeckung
-                </span>
-              )}
-            </Link>
-          </li>
-        ))}
-      </ul>
+              <RegionTile
+                slug={r.slug ?? m?.slug ?? ""}
+                name={r.name ?? m?.name ?? r.slug ?? ""}
+                country={m?.country ?? null}
+                image={api.resolveMediaUrl(m?.image?.url)}
+                coverage={r.coverage ?? null}
+                rank={i + 1}
+                windMonths={(m?.season?.best_months as number[] | undefined) ?? null}
+              />
+            </div>
+          );
+        })}
+      </div>
     </section>
   );
 }

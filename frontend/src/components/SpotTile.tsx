@@ -1,6 +1,10 @@
-import { Link } from "react-router-dom";
+import { useEffect, useState, type MouseEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import SpotImage from "./SpotImage";
 import { sportLabel } from "../lib/labels";
+import { useAuth } from "../context/AuthContext";
+import { isFavorite, toggleFavorite, FAVORITES_EVENT } from "../lib/account";
+import { HeartIcon, HeartFilledIcon } from "../lib/icons";
 import type { Spot } from "../lib/types";
 import type { LiveConditionsRead } from "../lib/api";
 
@@ -25,6 +29,25 @@ export default function SpotTile({
   live?: LiveConditionsRead | null;
 }) {
   const id = spot.uuid ?? spot.id;
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [fav, setFav] = useState(() => isFavorite(id));
+  useEffect(() => {
+    const sync = () => setFav(isFavorite(id));
+    window.addEventListener(FAVORITES_EVENT, sync);
+    return () => window.removeEventListener(FAVORITES_EVENT, sync);
+  }, [id]);
+
+  // Toggle without triggering the tile's navigation; prompt sign-in when needed.
+  const onFav = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!user) {
+      navigate("/anmelden");
+      return;
+    }
+    setFav(toggleFavorite({ id, name: spot.name, region: spot.region, sports: spot.sports }));
+  };
 
   const liveWind = live?.current.wind ?? null;
   const wind = liveWind ?? (spot.wind || null);
@@ -47,6 +70,22 @@ export default function SpotTile({
         />
       </div>
       <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
+
+      <button
+        type="button"
+        onClick={onFav}
+        aria-pressed={fav}
+        aria-label={
+          fav ? `${spot.name} aus Favoriten entfernen` : `${spot.name} zu Favoriten hinzufügen`
+        }
+        className="absolute right-2.5 top-2.5 z-10 grid h-9 w-9 place-items-center rounded-full bg-black/25 text-white backdrop-blur transition-colors hover:bg-black/45"
+      >
+        {fav ? (
+          <HeartFilledIcon className="text-[18px] text-brand-orange" />
+        ) : (
+          <HeartIcon className="text-[18px]" />
+        )}
+      </button>
 
       {/* bottom glass panel */}
       <div className="glass absolute inset-x-0 bottom-0 p-3.5 text-white">

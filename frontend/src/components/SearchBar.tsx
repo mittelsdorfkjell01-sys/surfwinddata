@@ -5,7 +5,6 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { SearchIcon } from "../lib/icons";
 import SearchWhere, { type WherePick } from "./search/SearchWhere";
 import SearchWhen from "./search/SearchWhen";
-import SearchWhich from "./search/SearchWhich";
 import { addRecent } from "../lib/recentSearches";
 import {
   buildSearchParams,
@@ -14,14 +13,7 @@ import {
   type SearchValue,
 } from "../lib/searchSubmit";
 
-type Segment = "where" | "when" | "which";
-
-const SPORT_UI: Record<string, string> = {
-  surf: "Surfen",
-  kitesurf: "Kitesurfen",
-  windsurf: "Windsurfen",
-  wing: "Wing",
-};
+type Segment = "where" | "when";
 
 // Fixed panel height so every segment's dropdown is exactly the same size (no
 // jump when switching fields); taller content (e.g. the "Wohin?" list) scrolls
@@ -95,12 +87,6 @@ export default function SearchBar() {
     close();
   };
 
-  const whichText = val.which.length
-    ? val.which.length === 1
-      ? SPORT_UI[val.which[0]]
-      : `${val.which.length} Sportarten`
-    : "";
-
   const dim = (seg: Segment) => !!open && open !== seg;
 
   return (
@@ -142,17 +128,6 @@ export default function SearchBar() {
             active={open === "when"}
             dim={dim("when")}
             onClick={(el) => openSeg("when", el)}
-          />
-
-          <Divider />
-
-          <Segment
-            label="Welche?"
-            placeholder="Wähle deine Surfart"
-            value={whichText}
-            active={open === "which"}
-            dim={dim("which")}
-            onClick={(el) => openSeg("which", el)}
           />
 
           <button
@@ -239,16 +214,6 @@ export default function SearchBar() {
                       <SearchWhen
                         value={val.when}
                         onChange={(when) => setVal((v) => ({ ...v, when }))}
-                      />
-                    )}
-                    {open === "which" && (
-                      <SearchWhich
-                        value={val.which}
-                        onChange={(which) => setVal((v) => ({ ...v, which }))}
-                        disciplines={val.disciplines}
-                        onDisciplinesChange={(disciplines) =>
-                          setVal((v) => ({ ...v, disciplines }))
-                        }
                       />
                     )}
                   </motion.div>

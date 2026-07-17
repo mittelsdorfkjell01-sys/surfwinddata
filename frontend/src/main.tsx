@@ -19,6 +19,14 @@ import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/ErrorBoundary";
 import RouteError from "./components/RouteError";
 import { ADMIN_DEPLOY, INCLUDE_ADMIN } from "./lib/target";
+import Auth from "./pages/Auth";
+import AccountLayout from "./pages/account/AccountLayout";
+import Profil from "./pages/account/Profil";
+import Favoriten from "./pages/account/Favoriten";
+import MeineSpots from "./pages/account/MeineSpots";
+import Einstellungen from "./pages/account/Einstellungen";
+import { AuthProvider } from "./context/AuthContext";
+import { PrefsProvider } from "./context/PrefsContext";
 
 // The admin back office is code-split behind a build flag: the public build
 // (surfwinddata.com) never imports ./adminRoutes, so none of the admin UI ships.
@@ -36,6 +44,18 @@ async function bootstrap() {
     { path: "/region/:slug", element: <RegionDetail /> },
     { path: "/impressum", element: <Impressum /> },
     { path: "/datenschutz", element: <Datenschutz /> },
+    { path: "/anmelden", element: <Auth /> },
+    {
+      path: "/konto",
+      element: <AccountLayout />,
+      children: [
+        { index: true, element: <Navigate to="/konto/profil" replace /> },
+        { path: "profil", element: <Profil /> },
+        { path: "favoriten", element: <Favoriten /> },
+        { path: "spots", element: <MeineSpots /> },
+        { path: "einstellungen", element: <Einstellungen /> },
+      ],
+    },
   ];
 
   if (INCLUDE_ADMIN) {
@@ -53,7 +73,11 @@ async function bootstrap() {
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <ErrorBoundary>
-        <RouterProvider router={router} />
+        <PrefsProvider>
+          <AuthProvider>
+            <RouterProvider router={router} />
+          </AuthProvider>
+        </PrefsProvider>
       </ErrorBoundary>
     </React.StrictMode>
   );
