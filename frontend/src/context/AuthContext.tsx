@@ -24,9 +24,9 @@ interface AuthValue {
 const AuthCtx = createContext<AuthValue | null>(null);
 
 /**
- * Holds the public-account session. Backed by the localStorage mock in
- * lib/account for now; swap the calls for the real /auth endpoints later without
- * touching consumers.
+ * Holds the public-account session, resolved from the real /account endpoints
+ * (see lib/account). `ready` guards the initial session lookup so the UI does
+ * not flicker between logged-out and logged-in on first paint.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Account | null>(null);

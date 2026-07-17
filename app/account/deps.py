@@ -41,15 +41,3 @@ def current_account(
             status_code=401, detail="Konto nicht gefunden oder deaktiviert."
         )
     return user
-
-
-def optional_account(
-    request: Request, db: Session = Depends(get_db)
-) -> AppUser | None:
-    """Like :func:`current_account` but returns ``None`` instead of raising when
-    there is no valid session. Used where a logged-in visitor is enriched onto an
-    otherwise-anonymous action (e.g. attaching ownership to a submission)."""
-    try:
-        return current_account(request, db)
-    except HTTPException:
-        return None

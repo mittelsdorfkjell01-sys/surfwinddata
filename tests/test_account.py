@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.main import app
-from app.models import AppUser, Favorite, SpotSubmission
+from app.models import Favorite, SpotSubmission
 
 ACCT_COOKIE = get_settings().app_auth_cookie_name
 
