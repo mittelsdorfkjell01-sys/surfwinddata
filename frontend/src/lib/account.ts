@@ -1,12 +1,15 @@
-// Dev mock of the (not-yet-built) public account backend. Everything lives in
-// localStorage so the account pages work standalone in this frontend-first
-// build. SWAP POINT: when the real API ships (separate public `users` table +
-// app/auth session cookie), replace these bodies with fetch() calls — the
-// signatures are chosen to line up with the planned endpoints.
+// Public account API. Talks to the FastAPI /account endpoints (see
+// app/api/account.py). Auth is an httpOnly session cookie set by the server —
+// this module never sees a token; `request` sends credentials on every call.
 //
-// SECURITY: browser-only mock. Passwords are NOT stored securely (obscured, not
-// hashed) — never ship this as the real auth. The real system reuses app/auth
-// (hashed password + httpOnly session cookie).
+// Favourites and submissions expose a SYNCHRONOUS read surface (isFavorite,
+// listFavorites, listMySubmissions) because the UI reads them during render. We
+// back that with a small in-memory cache that `hydrate()` fills from the server
+// once a session is established, then broadcast FAVORITES_EVENT / SUBMISSIONS_EVENT
+// so mounted components re-read. Mutations update the cache optimistically and
+// reconcile with the server in the background.
+
+import { ApiError, request } from "./api";
 
 export interface Account {
   id: string;
@@ -37,57 +40,66 @@ export class AccountError extends Error {}
 export const FAVORITES_EVENT = "swd:favorites";
 export const SUBMISSIONS_EVENT = "swd:submissions";
 
-const K = {
-  users: "swd.account.users",
-  session: "swd.account.session",
-  fav: (uid: string) => `swd.account.fav.${uid}`,
-  subs: (uid: string) => `swd.account.subs.${uid}`,
-};
-
-interface StoredUser extends Account {
-  pw: string;
-}
-
-function read<T>(key: string, fallback: T): T {
+/** Run an account request, surfacing the server's German detail as an
+ *  AccountError the pages already know how to display. */
+async function call<T>(path: string, init?: RequestInit): Promise<T> {
   try {
-    const v = localStorage.getItem(key);
-    return v ? (JSON.parse(v) as T) : fallback;
-  } catch {
-    return fallback;
+    return await request<T>(path, init);
+  } catch (e) {
+    if (e instanceof ApiError) throw new AccountError(e.message);
+    throw e;
   }
 }
-function write(key: string, val: unknown): void {
-  localStorage.setItem(key, JSON.stringify(val));
+
+// --- in-memory caches ------------------------------------------------------
+
+let favCache: FavoriteSpot[] = [];
+let subsCache: MySubmission[] = [];
+
+function emit(name: string): void {
+  window.dispatchEvent(new CustomEvent(name));
 }
 
-// Mimic a small network round-trip so loading states are real.
-const delay = () => new Promise((r) => setTimeout(r, 180));
-const norm = (e: string) => e.trim().toLowerCase();
-const newId = () =>
-  typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-// NOT secure — obscures the password in devtools only. Mock-scope.
-const obscure = (s: string) => btoa(unescape(encodeURIComponent(s)));
-
-function allUsers(): StoredUser[] {
-  return read<StoredUser[]>(K.users, []);
-}
-function saveUsers(u: StoredUser[]): void {
-  write(K.users, u);
-}
-function toAccount(u: StoredUser): Account {
-  const { pw: _pw, ...a } = u;
-  return a;
+function clearCaches(): void {
+  favCache = [];
+  subsCache = [];
+  emit(FAVORITES_EVENT);
+  emit(SUBMISSIONS_EVENT);
 }
 
-// --- auth ------------------------------------------------------------------
+/** Load the signed-in user's favourites + submissions into the cache. Called
+ *  after a session is confirmed; failures leave the caches empty (best-effort). */
+async function hydrate(): Promise<void> {
+  try {
+    const [favs, subs] = await Promise.all([
+      request<{ items: FavoriteSpot[] }>("/account/favorites"),
+      request<{ items: MySubmission[] }>("/account/submissions"),
+    ]);
+    favCache = favs.items;
+    subsCache = subs.items;
+    emit(FAVORITES_EVENT);
+    emit(SUBMISSIONS_EVENT);
+  } catch {
+    /* not logged in / offline → caches stay empty */
+  }
+}
 
-export function currentAccount(): Account | null {
-  const id = localStorage.getItem(K.session);
-  if (!id) return null;
-  const u = allUsers().find((x) => x.id === id);
-  return u ? toAccount(u) : null;
+// --- auth / session --------------------------------------------------------
+
+/** Resolve the current session (or null). Hydrates the caches on success. Used
+ *  by AuthContext on mount and after auth changes. */
+export async function fetchSession(): Promise<Account | null> {
+  try {
+    const me = await request<Account>("/account/me");
+    await hydrate();
+    return me;
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) {
+      clearCaches();
+      return null;
+    }
+    throw e;
+  }
 }
 
 export async function register(input: {
@@ -95,154 +107,122 @@ export async function register(input: {
   password: string;
   displayName: string;
 }): Promise<Account> {
-  await delay();
-  const email = norm(input.email);
-  if (!email.includes("@")) throw new AccountError("Bitte eine gültige E-Mail eingeben.");
-  if (input.password.length < 6)
-    throw new AccountError("Das Passwort muss mindestens 6 Zeichen haben.");
-  const users = allUsers();
-  if (users.some((u) => u.email === email))
-    throw new AccountError("Für diese E-Mail existiert bereits ein Konto.");
-  const user: StoredUser = {
-    id: newId(),
-    email,
-    displayName: input.displayName.trim() || email.split("@")[0],
-    createdAt: new Date().toISOString(),
-    pw: obscure(input.password),
-  };
-  users.push(user);
-  saveUsers(users);
-  localStorage.setItem(K.session, user.id);
-  return toAccount(user);
+  const acc = await call<Account>("/account/register", {
+    method: "POST",
+    body: JSON.stringify({
+      email: input.email,
+      password: input.password,
+      displayName: input.displayName,
+    }),
+  });
+  await hydrate();
+  return acc;
 }
 
-export async function login(input: { email: string; password: string }): Promise<Account> {
-  await delay();
-  const email = norm(input.email);
-  const u = allUsers().find((x) => x.email === email);
-  if (!u || u.pw !== obscure(input.password))
-    throw new AccountError("E-Mail oder Passwort ist falsch.");
-  localStorage.setItem(K.session, u.id);
-  return toAccount(u);
+export async function login(input: {
+  email: string;
+  password: string;
+}): Promise<Account> {
+  const acc = await call<Account>("/account/login", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  await hydrate();
+  return acc;
 }
 
 export async function logout(): Promise<void> {
-  await delay();
-  localStorage.removeItem(K.session);
+  try {
+    await request("/account/logout", { method: "POST" });
+  } finally {
+    clearCaches();
+  }
 }
 
 export async function updateProfile(patch: {
   displayName?: string;
   email?: string;
 }): Promise<Account> {
-  await delay();
-  const cur = currentAccount();
-  if (!cur) throw new AccountError("Nicht angemeldet.");
-  const users = allUsers();
-  const i = users.findIndex((u) => u.id === cur.id);
-  if (i < 0) throw new AccountError("Konto nicht gefunden.");
-  if (patch.email !== undefined) {
-    const email = norm(patch.email);
-    if (!email.includes("@")) throw new AccountError("Bitte eine gültige E-Mail eingeben.");
-    if (users.some((u) => u.email === email && u.id !== cur.id))
-      throw new AccountError("Diese E-Mail ist bereits vergeben.");
-    users[i].email = email;
-  }
-  if (patch.displayName !== undefined)
-    users[i].displayName = patch.displayName.trim() || users[i].displayName;
-  saveUsers(users);
-  return toAccount(users[i]);
+  return call<Account>("/account/profile", {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
 }
 
 export async function changePassword(oldPw: string, newPw: string): Promise<void> {
-  await delay();
-  const cur = currentAccount();
-  if (!cur) throw new AccountError("Nicht angemeldet.");
-  if (newPw.length < 6)
-    throw new AccountError("Das neue Passwort muss mindestens 6 Zeichen haben.");
-  const users = allUsers();
-  const i = users.findIndex((u) => u.id === cur.id);
-  if (i < 0 || users[i].pw !== obscure(oldPw))
-    throw new AccountError("Das aktuelle Passwort ist falsch.");
-  users[i].pw = obscure(newPw);
-  saveUsers(users);
+  await call<void>("/account/password", {
+    method: "POST",
+    body: JSON.stringify({ oldPassword: oldPw, newPassword: newPw }),
+  });
 }
 
-// --- favorites -------------------------------------------------------------
-
-function requireUid(): string {
-  const c = currentAccount();
-  if (!c) throw new AccountError("Nicht angemeldet.");
-  return c.id;
-}
+// --- favourites ------------------------------------------------------------
 
 export function listFavorites(): FavoriteSpot[] {
-  const c = currentAccount();
-  return c ? read<FavoriteSpot[]>(K.fav(c.id), []) : [];
+  return favCache;
 }
 
 export function isFavorite(spotId: string): boolean {
-  return listFavorites().some((f) => f.id === spotId);
+  return favCache.some((f) => f.id === spotId);
 }
 
-/** Toggle a spot's favourite state. Returns the new state (true = now saved). */
+/** Toggle a spot's favourite state. Returns the new state synchronously
+ *  (optimistic); the server call runs in the background and rolls back on
+ *  failure. Callers guard on auth before invoking (see SpotTile). */
 export function toggleFavorite(spot: {
   id: string;
   name: string;
   region?: string | null;
   sports?: string[];
 }): boolean {
-  const uid = requireUid();
-  const list = read<FavoriteSpot[]>(K.fav(uid), []);
-  const idx = list.findIndex((f) => f.id === spot.id);
-  let nowFav: boolean;
-  if (idx >= 0) {
-    list.splice(idx, 1);
-    nowFav = false;
-  } else {
-    list.unshift({
+  const exists = favCache.some((f) => f.id === spot.id);
+  if (exists) {
+    removeFavorite(spot.id);
+    return false;
+  }
+  const prev = favCache;
+  favCache = [
+    {
       id: spot.id,
       name: spot.name,
       region: spot.region ?? null,
       sports: spot.sports ?? [],
       addedAt: new Date().toISOString(),
-    });
-    nowFav = true;
-  }
-  write(K.fav(uid), list);
-  window.dispatchEvent(new CustomEvent(FAVORITES_EVENT));
-  return nowFav;
+    },
+    ...favCache,
+  ];
+  emit(FAVORITES_EVENT);
+  request(`/account/favorites/${spot.id}`, { method: "PUT" }).catch(() => {
+    favCache = prev; // rollback
+    emit(FAVORITES_EVENT);
+  });
+  return true;
 }
 
 export function removeFavorite(spotId: string): void {
-  const c = currentAccount();
-  if (!c) return;
-  const list = read<FavoriteSpot[]>(K.fav(c.id), []).filter((f) => f.id !== spotId);
-  write(K.fav(c.id), list);
-  window.dispatchEvent(new CustomEvent(FAVORITES_EVENT));
+  const prev = favCache;
+  favCache = favCache.filter((f) => f.id !== spotId);
+  emit(FAVORITES_EVENT);
+  request(`/account/favorites/${spotId}`, { method: "DELETE" }).catch(() => {
+    favCache = prev; // rollback
+    emit(FAVORITES_EVENT);
+  });
 }
 
 // --- my submissions --------------------------------------------------------
 
 export function listMySubmissions(): MySubmission[] {
-  const c = currentAccount();
-  return c ? read<MySubmission[]>(K.subs(c.id), []) : [];
+  return subsCache;
 }
 
-/** Record a proposed spot. In the real build this fires after a successful
- *  POST /submissions and stores the server id + status. */
+/** Propose a spot by name. POSTs to the server, then prepends the stored row to
+ *  the cache and notifies the list. */
 export async function addSubmission(name: string): Promise<MySubmission> {
-  await delay();
-  const uid = requireUid();
-  const list = read<MySubmission[]>(K.subs(uid), []);
-  const sub: MySubmission = {
-    id: newId(),
-    name: name.trim() || "Unbenannter Spot",
-    status: "pending",
-    createdAt: new Date().toISOString(),
-  };
-  list.unshift(sub);
-  write(K.subs(uid), list);
-  window.dispatchEvent(new CustomEvent(SUBMISSIONS_EVENT));
+  const sub = await call<MySubmission>("/account/submissions", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+  subsCache = [sub, ...subsCache];
+  emit(SUBMISSIONS_EVENT);
   return sub;
 }

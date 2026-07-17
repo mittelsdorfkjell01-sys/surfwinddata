@@ -33,8 +33,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setUser(account.currentAccount());
-    setReady(true);
+    let alive = true;
+    account
+      .fetchSession()
+      .then((u) => {
+        if (alive) setUser(u);
+      })
+      .catch(() => {
+        if (alive) setUser(null);
+      })
+      .finally(() => {
+        if (alive) setReady(true);
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const value = useMemo<AuthValue>(

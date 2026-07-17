@@ -7,8 +7,9 @@ import { Button, Field, Input, Wordmark } from "../components/ui";
 type Mode = "login" | "register";
 
 /**
- * Combined sign-in / registration for the public account. Backed by the auth
- * mock; on success it returns to `?redirect=` (default the account home).
+ * Combined sign-in / registration for the public account. Backed by the real
+ * /account endpoints; on success it returns to `?redirect=` (default the account
+ * home).
  */
 export default function Auth() {
   const { login, register } = useAuth();
@@ -133,11 +134,6 @@ export default function Auth() {
           </button>
         </p>
       </div>
-
-      <p className="mt-6 max-w-[420px] text-center text-[11px] text-muted">
-        Hinweis: Konten werden derzeit nur lokal in deinem Browser gespeichert
-        (Demo). Der Server-Login folgt.
-      </p>
     </div>
   );
 }
