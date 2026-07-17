@@ -26,7 +26,11 @@ export interface FavoriteSpot {
   addedAt: string;
 }
 
-export type SubmissionStatus = "pending" | "published" | "rejected";
+// Mirrors the backend submission lifecycle (app/admin/moderation.py): a proposal
+// is "pending", becomes "merged" once an admin turns it into a (draft) spot, or
+// "rejected". The UI maps these to badges with a safe fallback for any value it
+// does not recognise.
+export type SubmissionStatus = "pending" | "merged" | "rejected";
 export interface MySubmission {
   id: string;
   name: string;

@@ -10,13 +10,19 @@ import {
 import { Button, Input } from "../../components/ui";
 import { PlusCircleIcon } from "../../lib/icons";
 
-const STATUS: Record<SubmissionStatus, { label: string; cls: string }> = {
+type Badge = { label: string; cls: string };
+
+// Keyed by the raw backend status. `merged` = the proposal was accepted and a
+// (still draft) spot was created — hence "Übernommen", not "Veröffentlicht"
+// (go-live is a separate step). Looked up defensively (see FALLBACK) so an
+// unrecognised status renders a neutral badge instead of crashing the page.
+const STATUS: Record<SubmissionStatus, Badge> = {
   pending: {
     label: "In Prüfung",
     cls: "bg-amber-100 text-amber-800",
   },
-  published: {
-    label: "Veröffentlicht",
+  merged: {
+    label: "Übernommen",
     cls: "bg-green-100 text-green-800",
   },
   rejected: {
@@ -24,6 +30,8 @@ const STATUS: Record<SubmissionStatus, { label: string; cls: string }> = {
     cls: "bg-red-100 text-red-700",
   },
 };
+
+const FALLBACK: Badge = { label: "Unbekannt", cls: "bg-line text-muted" };
 
 export default function MeineSpots() {
   const [subs, setSubs] = useState<MySubmission[]>(listMySubmissions);
@@ -91,7 +99,7 @@ export default function MeineSpots() {
       ) : (
         <ul className="space-y-2">
           {subs.map((s) => {
-            const st = STATUS[s.status];
+            const st = STATUS[s.status] ?? FALLBACK;
             return (
               <li
                 key={s.id}
