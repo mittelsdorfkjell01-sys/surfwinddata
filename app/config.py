@@ -132,6 +132,18 @@ class Settings(BaseSettings):
     admin_bootstrap_email: str | None = None
     admin_bootstrap_password: str | None = None
 
+    # --- Public accounts (visitor sign-up) ---------------------------------
+    # Separate session cookie from the admin one, so a visitor account and an
+    # admin session can coexist in one browser and neither can be mistaken for
+    # the other. Signed with the same jwt_secret but carries a "typ":"app" claim
+    # so an admin token is never accepted on the account API (and vice versa).
+    app_auth_cookie_name: str = "swd_acct"
+    # Visitor sessions are long-lived (people expect to stay signed in); admins
+    # get the shorter jwt_ttl_hours above.
+    app_jwt_ttl_hours: int = 720  # 30 days
+    # Minimum password length enforced on registration / change (mirrors the FE).
+    app_password_min_length: int = 6
+
     # Contact address surfaced by the take-down / image-report flow (Sprint C).
     takedown_contact_email: str | None = None
 

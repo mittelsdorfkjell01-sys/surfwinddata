@@ -102,6 +102,7 @@ class SpotSubmission(Base, TimestampMixin):
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
     submitter_name: Mapped[str] = mapped_column(String(120), nullable=False)
     submitter_email: Mapped[str | None] = mapped_column(String(255))
+    app_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default=text("'pending'")
     )
@@ -113,7 +114,10 @@ class SpotSubmission(Base, TimestampMixin):
     )
     ip_hash: Mapped[str | None] = mapped_column(String(64))
 
-    __table_args__ = (Index("ix_submission_status", "status"),)
+    __table_args__ = (
+        Index("ix_submission_status", "status"),
+        Index("ix_submission_app_user", "app_user_id"),
+    )
 
 
 class SpotImage(Base, TimestampMixin):

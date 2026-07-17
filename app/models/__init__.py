@@ -10,6 +10,8 @@ from app.models.scoring_params import ScoringParams
 from app.models.spot_audit import SpotAudit
 from app.models.required_fields import RequiredField
 from app.models.admin_user import AdminUser
+from app.models.app_user import AppUser
+from app.models.favorite import Favorite
 from app.models.ugc import (
     SpotRating,
     LocalTip,
@@ -32,6 +34,8 @@ __all__ = [
     "SpotAudit",
     "RequiredField",
     "AdminUser",
+    "AppUser",
+    "Favorite",
     "SpotRating",
     "LocalTip",
     "SpotSubmission",
