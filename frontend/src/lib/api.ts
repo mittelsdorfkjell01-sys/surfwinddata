@@ -589,10 +589,18 @@ export interface ReviewQueue {
 
 export const getReviewQueue = () => request<ReviewQueue>(`/admin/review/queue`);
 
-export const approveSubmission = (id: string) =>
+/** Fields an admin supplies to complete a name-only proposal at approval time.
+ *  Omit for a submission that already carries a full payload. */
+export interface SubmissionCompletion {
+  region_id?: string;
+  lat?: number;
+  lon?: number;
+  sports?: string[];
+}
+export const approveSubmission = (id: string, completion: SubmissionCompletion = {}) =>
   request<{ spot_id: string; status: string }>(
     `/admin/submissions/${id}/approve`,
-    { method: "POST" }
+    { method: "POST", body: JSON.stringify(completion) }
   );
 export const rejectSubmission = (id: string, note?: string) =>
   request<{ status: string }>(`/admin/submissions/${id}/reject`, {

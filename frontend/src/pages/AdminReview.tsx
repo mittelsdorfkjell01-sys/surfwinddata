@@ -10,14 +10,19 @@ import {
   approveImage,
   approveSubmission,
   dismissReports,
+  getRegions,
   getReviewQueue,
   hideRating,
   hideTip,
   rejectImage,
   rejectSubmission,
   removeImage,
+  type Region,
   type ReviewQueue,
+  type ReviewSubmission,
+  type SubmissionCompletion,
 } from "../lib/api";
+import { SPORT_LABELS } from "../lib/labels";
 
 type Tab = "submissions" | "hero" | "reported" | "content";
 
@@ -34,6 +39,7 @@ const TABS: { key: Tab; label: string; count: (q: ReviewQueue) => number }[] = [
 
 export default function AdminReview() {
   const [queue, setQueue] = useState<ReviewQueue | null>(null);
+  const [regions, setRegions] = useState<Region[]>([]);
   const [tab, setTab] = useState<Tab>("submissions");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -50,6 +56,15 @@ export default function AdminReview() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Regions power the completion form's dropdown; load once.
+  useEffect(() => {
+    getRegions()
+      .then(setRegions)
+      .catch(() => {
+        /* dropdown just stays empty; approval still works for full payloads */
+      });
+  }, []);
 
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -109,25 +124,14 @@ export default function AdminReview() {
               <Empty>Keine offenen Einreichungen.</Empty>
             ) : (
               queue.submissions.map((s) => (
-                <Card key={s.id}>
-                  <div className="min-w-0">
-                    <div className="font-semibold text-navy">{s.name ?? "—"}</div>
-                    <div className="text-[13px] text-muted">
-                      von {s.submitter_name} · {new Date(s.created_at).toLocaleDateString("de-DE")}
-                    </div>
-                    <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-cream p-2 text-[12px] text-navy/80">
-                      {JSON.stringify(s.payload, null, 2)}
-                    </pre>
-                  </div>
-                  <Actions>
-                    <Approve busy={busy} onClick={() => act(() => approveSubmission(s.id))}>
-                      Als Entwurf anlegen
-                    </Approve>
-                    <Reject busy={busy} onClick={() => act(() => rejectSubmission(s.id, promptNote()))}>
-                      Ablehnen
-                    </Reject>
-                  </Actions>
-                </Card>
+                <SubmissionCard
+                  key={s.id}
+                  submission={s}
+                  regions={regions}
+                  busy={busy}
+                  onApprove={(completion) => act(() => approveSubmission(s.id, completion))}
+                  onReject={() => act(() => rejectSubmission(s.id, promptNote()))}
+                />
               ))
             ))}
 
@@ -233,6 +237,158 @@ export default function AdminReview() {
 
 function promptNote(): string | undefined {
   return window.prompt("Notiz (optional):") ?? undefined;
+}
+
+const SPORT_KEYS = Object.keys(SPORT_LABELS);
+
+/**
+ * One pending spot proposal. A full community submission already carries
+ * region + coordinates and approves in one click. A name-only account proposal
+ * does not — so the admin completes region, coordinates (and optionally sports)
+ * inline before it can become a draft spot. The finer details are refined later
+ * on the spot's edit page.
+ */
+function SubmissionCard({
+  submission,
+  regions,
+  busy,
+  onApprove,
+  onReject,
+}: {
+  submission: ReviewSubmission;
+  regions: Region[];
+  busy: boolean;
+  onApprove: (completion: SubmissionCompletion) => void;
+  onReject: () => void;
+}) {
+  const p = submission.payload;
+  const hasRegion = typeof p.region_id === "string";
+  const hasLat = typeof p.lat === "number";
+  const hasLon = typeof p.lon === "number";
+  const complete = hasRegion && hasLat && hasLon;
+
+  const [regionId, setRegionId] = useState("");
+  const [lat, setLat] = useState("");
+  const [lon, setLon] = useState("");
+  const [sports, setSports] = useState<string[]>([]);
+
+  const latN = Number(lat);
+  const lonN = Number(lon);
+  const latOk = lat.trim() !== "" && Number.isFinite(latN) && latN >= -90 && latN <= 90;
+  const lonOk = lon.trim() !== "" && Number.isFinite(lonN) && lonN >= -180 && lonN <= 180;
+  const canComplete = regionId !== "" && latOk && lonOk;
+
+  const toggleSport = (k: string) =>
+    setSports((cur) => (cur.includes(k) ? cur.filter((s) => s !== k) : [...cur, k]));
+
+  return (
+    <Card>
+      <div className="min-w-0 flex-1">
+        <div className="font-semibold text-navy">{submission.name ?? "—"}</div>
+        <div className="text-[13px] text-muted">
+          von {submission.submitter_name} ·{" "}
+          {new Date(submission.created_at).toLocaleDateString("de-DE")}
+        </div>
+
+        {complete ? (
+          <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-cream p-2 text-[12px] text-navy/80">
+            {JSON.stringify(submission.payload, null, 2)}
+          </pre>
+        ) : (
+          <div className="mt-3 rounded-xl border border-line bg-cream/40 p-3">
+            <p className="mb-2 text-[12px] font-medium text-muted">
+              Nur als Name eingereicht — zum Anlegen Region und Koordinaten ergänzen.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-[12px] text-muted">Region</span>
+                <select
+                  value={regionId}
+                  onChange={(e) => setRegionId(e.target.value)}
+                  className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-[13px] text-navy"
+                >
+                  <option value="">— wählen —</option>
+                  {regions.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                      {r.country ? `, ${r.country}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block">
+                  <span className="mb-1 block text-[12px] text-muted">Breitengrad</span>
+                  <input
+                    inputMode="decimal"
+                    value={lat}
+                    onChange={(e) => setLat(e.target.value)}
+                    placeholder="54.41"
+                    className={`w-full rounded-lg border bg-white px-2 py-1.5 text-[13px] text-navy ${
+                      lat && !latOk ? "border-red-300" : "border-line"
+                    }`}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[12px] text-muted">Längengrad</span>
+                  <input
+                    inputMode="decimal"
+                    value={lon}
+                    onChange={(e) => setLon(e.target.value)}
+                    placeholder="10.22"
+                    className={`w-full rounded-lg border bg-white px-2 py-1.5 text-[13px] text-navy ${
+                      lon && !lonOk ? "border-red-300" : "border-line"
+                    }`}
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {SPORT_KEYS.map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => toggleSport(k)}
+                  aria-pressed={sports.includes(k)}
+                  className={`rounded-full px-2.5 py-1 text-[12px] font-medium ${
+                    sports.includes(k)
+                      ? "bg-navy text-white"
+                      : "bg-white text-navy/70 ring-1 ring-line hover:text-navy"
+                  }`}
+                >
+                  {SPORT_LABELS[k]}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      <Actions>
+        {complete ? (
+          <Approve busy={busy} onClick={() => onApprove({})}>
+            Als Entwurf anlegen
+          </Approve>
+        ) : (
+          <Approve
+            busy={busy || !canComplete}
+            onClick={() =>
+              onApprove({
+                region_id: regionId,
+                lat: latN,
+                lon: lonN,
+                sports: sports.length ? sports : undefined,
+              })
+            }
+          >
+            Vervollständigen & anlegen
+          </Approve>
+        )}
+        <Reject busy={busy} onClick={onReject}>
+          Ablehnen
+        </Reject>
+      </Actions>
+    </Card>
+  );
 }
 
 function Card({ children }: { children: React.ReactNode }) {
