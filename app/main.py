@@ -48,6 +48,24 @@ def _bootstrap_admin_user() -> None:
 
 
 @app.on_event("startup")
+def _start_featured_warmup() -> None:
+    """Keep the featured "Top Spots" cache warm from inside the app process, so no
+    visitor pays the cold forecast-fetch cost on the request path.
+
+    A daemon thread (no extra container — lean on a small VPS), gated by
+    FEATURED_WARMUP_ENABLED so dev/tests make no background network calls."""
+    try:
+        cfg = get_settings()
+        if cfg.featured_warmup_enabled:
+            from app.discovery.warmup import run_in_background
+
+            run_in_background(interval=cfg.featured_warmup_interval)
+            print("[warmup] featured Top-Spots warm-up thread started")
+    except Exception as exc:  # never let the warm-up crash startup
+        print(f"[warmup] skipped ({type(exc).__name__}: {exc})")
+
+
+@app.on_event("startup")
 def _drain_era5_queue() -> None:
     """When ERA5 auto-processing is on, drain any pending climatology jobs in a
     background thread — so leftover queued spots get computed with no manual

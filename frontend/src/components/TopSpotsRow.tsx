@@ -1,4 +1,4 @@
-import { useSpots, useSpotsLive } from "../lib/hooks";
+import { useTopSpots, useSpotsLive } from "../lib/hooks";
 import SpotTile from "./SpotTile";
 import { ErrorBanner } from "./AsyncStates";
 
@@ -17,16 +17,15 @@ function RowSkeleton() {
 }
 
 /**
- * "aktuelle Top Spots" — a responsive grid of real published spots that fills
- * the row's full width (no horizontal scroll, so no tile is ever clipped). Each
- * tile fetches its own live wave (SpotTile); capped at MAX_TILES so the per-tile
- * live fan-out stays bounded and the desktop row stays a single clean line.
+ * "aktuelle Top Spots" — a responsive grid of the highest-ranked published
+ * spots (backend `/spots/top`: this week's wind forecast + today's conditions +
+ * popularity, rotating daily). Fills the row's full width (no horizontal scroll,
+ * so no tile is ever clipped). Each tile fetches its own live wave (SpotTile);
+ * capped at MAX_TILES so the per-tile live fan-out stays bounded and the desktop
+ * row stays a single clean line.
  */
 export default function TopSpotsRow() {
-  const { data: spots, loading, error, reload } = useSpots({
-    status: "published",
-    limit: MAX_TILES,
-  });
+  const { data: spots, loading, error, reload } = useTopSpots(MAX_TILES);
   const top = (spots ?? []).slice(0, MAX_TILES);
   // One batch request for the whole row's live conditions (instead of per tile).
   const { data: liveMap } = useSpotsLive(top.map((s) => s.uuid ?? s.id));

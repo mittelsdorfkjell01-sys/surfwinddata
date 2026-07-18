@@ -35,6 +35,28 @@ export function useSpots(query: api.SpotQuery = {}): AsyncStateReloadable<Spot[]
   };
 }
 
+/** "aktuelle Top Spots" — published spots ranked by this week's wind forecast,
+ *  today's conditions and popularity (backend `/spots/top`), adapted with their
+ *  regions. Rotates daily; same shape as {@link useSpots} so tiles are unchanged. */
+export function useTopSpots(limit = 5): AsyncStateReloadable<Spot[]> {
+  const spots = useSwr(`top-spots:${limit}`, () => api.getTopSpots(limit));
+  const regions = useRegions();
+  const data = useMemo(() => {
+    if (!spots.data || !regions.data) return null;
+    const byId = new Map(regions.data.map((r) => [r.id, r]));
+    return adaptSpots(spots.data, byId);
+  }, [spots.data, regions.data]);
+  return {
+    data,
+    loading: spots.loading || regions.loading,
+    error: spots.error ?? regions.error,
+    reload: () => {
+      spots.reload();
+      regions.reload();
+    },
+  };
+}
+
 /** A single spot (full record) + its region, adapted. */
 export function useSpot(id?: string): AsyncStateReloadable<Spot> {
   const spot = useSwr(id ? `spot:${id}` : null, () => api.getSpot(id!));

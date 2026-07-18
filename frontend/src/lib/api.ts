@@ -280,6 +280,11 @@ export interface SpotQuery {
 export const getSpots = (params: SpotQuery = {}) =>
   request<SpotSummary[]>(`/spots${qs(params as Record<string, unknown>)}`);
 
+/** "aktuelle Top Spots": published spots ranked by this week's wind forecast,
+ *  today's conditions and popularity. Stable per day, rotates daily. */
+export const getTopSpots = (limit = 5, sport?: string) =>
+  request<SpotSummary[]>(`/spots/top${qs({ limit, sport })}`);
+
 export const getSpot = (id: string) => request<SpotRead>(`/spots/${id}`);
 
 export const getSpotLive = (id: string) =>

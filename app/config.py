@@ -97,6 +97,14 @@ class Settings(BaseSettings):
     # TTL (seconds) for cached Open-Meteo live/forecast responses (30-60 min band).
     live_cache_ttl: int = 1800
 
+    # Keep the featured "aktuelle Top Spots" cache warm from inside the app process
+    # (a daemon thread), so the first visitor after the daily entry expires never
+    # pays the cold forecast-fetch cost. Off by default so dev/tests make no
+    # background network calls; enable in a running deployment
+    # (FEATURED_WARMUP_ENABLED=true). Interval bounds the worst-case cold window.
+    featured_warmup_enabled: bool = False
+    featured_warmup_interval: int = 1800
+
     # When true, a queued ERA5 job is processed automatically in the background
     # (on spot create and on the "ERA5 anstoßen" trigger) instead of waiting for
     # the batch runner. Off by default so tests stay deterministic; enable it in

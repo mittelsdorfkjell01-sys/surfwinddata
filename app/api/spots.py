@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, defer
 
 from app.api._http_cache import set_public_cache
 from app.db.session import get_db
+from app.discovery import service as discovery
 from app.live import service as live_service
 from app.live.cache import Cache
 from app.live.client import MAX_FORECAST_DAYS, OpenMeteoClient
@@ -69,6 +70,32 @@ def list_spots(
     rows = db.scalars(stmt).all()
     set_public_cache(response)
     return [SpotSummary.from_orm_spot(s) for s in rows]
+
+
+@router.get("/top", response_model=list[SpotSummary])
+def list_top_spots(
+    response: Response,
+    db: Session = Depends(get_db),
+    limit: int = Query(default=5, ge=1, le=20),
+    sport: str | None = Query(default=None, description="Rank only spots offering this sport"),
+    client: OpenMeteoClient = Depends(get_om_client),
+    cache: Cache = Depends(get_cache),
+) -> list[SpotSummary]:
+    """"aktuelle Top Spots": published spots ranked by a blend of this week's
+    wind forecast, today's conditions and community popularity.
+
+    Stable within a day and re-ranked when the date rolls over (a date seed also
+    rotates ties), so the set changes daily. Declared before ``/{spot_id}`` so
+    ``/spots/top`` is matched as a literal path, not a spot id.
+    """
+    ids = discovery.top_spot_ids(db, limit=limit, sport=sport, client=client, cache=cache)
+    if not ids:
+        set_public_cache(response)
+        return []
+    by_id = {s.id: s for s in db.scalars(select(Spot).where(Spot.id.in_(ids)))}
+    ordered = [by_id[i] for i in ids if i in by_id]
+    set_public_cache(response)
+    return [SpotSummary.from_orm_spot(s) for s in ordered]
 
 
 @router.get("/live", response_model=list[LiveConditionsRead], tags=["live"])
