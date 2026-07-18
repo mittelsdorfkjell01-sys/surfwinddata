@@ -11,9 +11,11 @@ export const heroManifest: Record<string, HeroVariant> =
     "widths": [
       1280,
       1920,
-      2560
+      2560,
+      3840
     ],
     "formats": [
+      "avif",
       "webp",
       "jpg"
     ],

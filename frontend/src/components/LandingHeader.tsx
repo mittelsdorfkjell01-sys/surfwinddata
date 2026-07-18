@@ -1,23 +1,18 @@
-import { Link, useLocation } from "react-router-dom";
-import { MapIcon } from "../lib/icons";
+import { Link } from "react-router-dom";
 import { INCLUDE_ADMIN } from "../lib/target";
 import { Wordmark } from "./ui";
 import AccountMenu from "./AccountMenu";
 
 /**
  * Landing-only top bar for the "surfwind data" design (Frame_1 / Frame_5).
- * Transparent over the hero: caps tagline (left), wordmark (centre), the map
- * link, the "Füge Spots hinzu" link (admin build) and the shared account menu.
+ * Transparent over the hero: caps tagline (left), wordmark (centre), the "Füge
+ * Spots hinzu" link (admin build) and the shared account menu. The map button
+ * lives down by the "aktuelle Top Spots" title (see Landing), not up here.
  *
  * Deliberately separate from the shared `Header.tsx` (which the map and search
  * pages reuse with a centred brand).
  */
 export default function LandingHeader() {
-  const location = useLocation();
-  // Remember where the map is opened from, so the map's close button can return
-  // here instead of always landing on "/".
-  const from = location.pathname + location.search;
-
   return (
     <header className="pointer-events-none absolute inset-x-0 top-0 z-[1000]">
       <div className="mx-auto max-w-[1500px] px-4 pt-9 sm:px-10 sm:pt-12">
@@ -36,18 +31,8 @@ export default function LandingHeader() {
             <Wordmark size="xl" />
           </Link>
 
-          {/* Right — map button + add-spot link + account menu */}
+          {/* Right — add-spot link + account menu */}
           <div className="col-start-3 flex items-center justify-end gap-3 sm:gap-5">
-            <Link
-              to="/map"
-              state={{ from }}
-              aria-label="Karte öffnen"
-              className="inline-flex items-center gap-2 rounded-2xl bg-white px-3.5 py-2 text-[15px] font-medium text-brand-teal shadow-pill transition-colors hover:bg-cream"
-            >
-              <MapIcon className="text-[18px]" />
-              <span className="hidden sm:inline">Karte</span>
-            </Link>
-
             {INCLUDE_ADMIN && (
               <Link
                 to="/admin/spot/new"

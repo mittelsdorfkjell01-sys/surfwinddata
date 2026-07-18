@@ -32,8 +32,7 @@ export default function SearchBar() {
   const [open, setOpen] = useState<Segment | null>(null);
   const [val, setVal] = useState<SearchValue>(EMPTY_SEARCH);
   const barRef = useRef<HTMLDivElement>(null);
-  const whereRef = useRef<HTMLDivElement>(null);
-  const whereInput = useRef<HTMLInputElement>(null);
+  const whereRef = useRef<HTMLButtonElement>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
 
   // Panel geometry: "Wann?" needs the full bar width for its two-month calendar;
@@ -93,31 +92,25 @@ export default function SearchBar() {
     <>
       <div ref={barRef} className="relative">
         <div className="flex flex-col gap-1.5 rounded-3xl bg-white p-2 shadow-card sm:flex-row sm:items-stretch sm:gap-1 sm:rounded-full">
-          {/* Wohin? — bears the text input */}
-          <div
+          {/* Wohin? — trigger; the text input lives in the panel below. */}
+          <button
+            type="button"
             ref={whereRef}
-            className={`flex flex-1 flex-col rounded-full px-6 py-2 text-left transition-all ${
+            onClick={() => openSeg("where", whereRef.current)}
+            aria-expanded={open === "where"}
+            className={`flex flex-1 flex-col items-start rounded-full px-6 py-2 text-left transition-all ${
               open === "where" ? "shadow-pill" : ""
             } ${dim("where") ? "opacity-55" : ""}`}
-            onClick={() => {
-              openSeg("where", whereRef.current);
-              whereInput.current?.focus();
-            }}
           >
             <span className="text-[13px] font-semibold text-brand-teal">Wohin?</span>
-            <input
-              ref={whereInput}
-              value={val.whereText}
-              onFocus={() => openSeg("where", whereRef.current)}
-              onChange={(e) =>
-                setVal((v) => ({ ...v, whereText: e.target.value, whereSel: null, whereOpen: false }))
-              }
-              placeholder="Region oder Spot suchen"
-              aria-label="Wohin?"
-              aria-expanded={open === "where"}
-              className="w-full rounded-md bg-transparent text-[13px] text-navy outline-none placeholder:text-muted"
-            />
-          </div>
+            <span
+              className={`truncate text-[13px] ${
+                val.whereText ? "text-navy" : "text-muted"
+              }`}
+            >
+              {val.whereText || "Region oder Spot suchen"}
+            </span>
+          </button>
 
           <Divider />
 
@@ -134,7 +127,7 @@ export default function SearchBar() {
             type="button"
             onClick={submit}
             aria-label="Suchen"
-            className="my-auto flex h-12 w-full shrink-0 items-center justify-center gap-2 rounded-full bg-brand-orange text-[15px] font-medium text-white transition-colors hover:bg-brand-orange-dark sm:ml-1 sm:w-12 sm:gap-0"
+            className="my-auto flex h-12 w-full shrink-0 items-center justify-center gap-2 rounded-full bg-brand-orange text-[15px] font-medium text-white transition-colors hover:bg-brand-orange-dark sm:ml-3 sm:mr-1 sm:w-12 sm:gap-0"
           >
             <SearchIcon className="text-[20px]" />
             <span className="sm:hidden">Suchen</span>
@@ -208,7 +201,19 @@ export default function SearchBar() {
                     transition={{ duration: 0.18, ease: "easeOut" }}
                   >
                     {open === "where" && (
-                      <SearchWhere query={val.whereText} onPick={pickWhere} onOpen={openWherePlace} />
+                      <SearchWhere
+                        query={val.whereText}
+                        onPick={pickWhere}
+                        onOpen={openWherePlace}
+                        onQueryChange={(text) =>
+                          setVal((v) => ({
+                            ...v,
+                            whereText: text,
+                            whereSel: null,
+                            whereOpen: false,
+                          }))
+                        }
+                      />
                     )}
                     {open === "when" && (
                       <SearchWhen

@@ -1,9 +1,9 @@
-// "Wohin?" panel (Frame_4): Spots + Regionen grids (flag + name) and a
-// "Zuletzt gesucht" column from localStorage. Selecting fills the search value.
+// "Wohin?" panel (Frame_4): a search input paired with the "unentschlossen"
+// shortcut on one row, then Spots + Regionen lists and a "Zuletzt gesucht"
+// column from localStorage. Selecting fills the search value.
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useRegions, useSpots } from "../../lib/hooks";
-import { countryFlag } from "../../lib/flags";
 import { getRecent, type RecentItem } from "../../lib/recentSearches";
 import type { WhereSelection } from "../../lib/searchSubmit";
 
@@ -11,22 +11,13 @@ export interface WherePick extends WhereSelection {
   country?: string | null;
 }
 
-function Row({
-  flag,
-  label,
-  onClick,
-}: {
-  flag: string;
-  label: string;
-  onClick: () => void;
-}) {
+function Row({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-cream"
+      className="flex items-center rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-cream"
     >
-      <span className="text-[16px] leading-none">{flag}</span>
       <span className="truncate text-[15px] text-brand-teal">{label}</span>
     </button>
   );
@@ -36,11 +27,18 @@ export default function SearchWhere({
   query,
   onPick,
   onOpen,
+  onQueryChange,
 }: {
   query: string;
   onPick: (pick: WherePick) => void;
   onOpen: () => void;
+  onQueryChange: (text: string) => void;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Focus the panel's own search field as soon as it opens.
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
   const { data: spots } = useSpots({ status: "published" });
   const { data: regions } = useRegions();
   // Snapshot recents once per mount so the list doesn't reshuffle mid-interaction.
@@ -62,14 +60,25 @@ export default function SearchWhere({
   // Single narrow column: the panel is only as wide as the "Wohin?" field.
   return (
     <div className="flex flex-col gap-5">
-      {/* Open place axis — "unentschlossen" → ranks the best regions. */}
-      <button
-        type="button"
-        onClick={onOpen}
-        className="self-start rounded-full border border-brand-teal/50 px-3 py-1 text-[12px] font-medium text-brand-teal transition-colors hover:bg-brand-teal/5"
-      >
-        unentschlossen
-      </button>
+      {/* Search input (left) + the "unentschlossen" shortcut (right) on one row.
+          "unentschlossen" opens the place axis → ranks the best regions. */}
+      <div className="flex items-center gap-2">
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder="Region oder Spot suchen"
+          aria-label="Region oder Spot suchen"
+          className="min-w-0 flex-1 rounded-full border border-line px-4 py-2 text-[14px] text-navy outline-none transition-colors placeholder:text-muted focus:border-brand-teal/60"
+        />
+        <button
+          type="button"
+          onClick={onOpen}
+          className="shrink-0 whitespace-nowrap rounded-full border border-brand-teal/50 px-3 py-2 text-[12px] font-medium text-brand-teal transition-colors hover:bg-brand-teal/5"
+        >
+          unentschlossen
+        </button>
+      </div>
 
       <div>
         <h3 className="mb-2 text-[13px] font-medium text-muted">Spots</h3>
@@ -80,7 +89,6 @@ export default function SearchWhere({
               return (
                 <Row
                   key={s.id}
-                  flag={countryFlag(country)}
                   label={s.name}
                   onClick={() =>
                     onPick({ label: s.name, kind: "spot", id: s.uuid ?? s.id, country })
@@ -101,7 +109,6 @@ export default function SearchWhere({
             {regionHits.map((r) => (
               <Row
                 key={r.id}
-                flag={countryFlag(r.country)}
                 label={r.name}
                 onClick={() =>
                   onPick({ label: r.name, kind: "region", id: r.id, country: r.country })
@@ -121,7 +128,6 @@ export default function SearchWhere({
             {recent.map((r, i) => (
               <Row
                 key={`${r.label}-${i}`}
-                flag={countryFlag(r.country)}
                 label={r.label}
                 onClick={() =>
                   onPick({
