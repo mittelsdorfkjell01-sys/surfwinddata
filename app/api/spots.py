@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -20,6 +21,8 @@ from app.scoring import (
     score_live,
 )
 from app.similarity import service as similarity_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/spots", tags=["spots"])
 
@@ -87,13 +90,30 @@ def list_top_spots(
     Stable within a day and re-ranked when the date rolls over (a date seed also
     rotates ties), so the set changes daily. Declared before ``/{spot_id}`` so
     ``/spots/top`` is matched as a literal path, not a spot id.
+
+    Non-critical widget: if the ranking can't be computed (e.g. the forecast
+    provider is unreachable), it degrades to a plain published list instead of
+    500-ing, so the landing row always renders.
     """
-    ids = discovery.top_spot_ids(db, limit=limit, sport=sport, client=client, cache=cache)
-    if not ids:
-        set_public_cache(response)
-        return []
-    by_id = {s.id: s for s in db.scalars(select(Spot).where(Spot.id.in_(ids)))}
-    ordered = [by_id[i] for i in ids if i in by_id]
+    try:
+        ids = discovery.top_spot_ids(
+            db, limit=limit, sport=sport, client=client, cache=cache
+        )
+    except Exception:
+        logger.exception("featured top-spots ranking failed — serving published list")
+        db.rollback()
+        ids = []
+
+    if ids:
+        by_id = {s.id: s for s in db.scalars(select(Spot).where(Spot.id.in_(ids)))}
+        ordered = [by_id[i] for i in ids if i in by_id]
+    else:
+        # Graceful fallback: the pre-ranking behaviour (published spots by name).
+        stmt = select(Spot).where(Spot.status == "published")
+        if sport is not None:
+            stmt = stmt.where(Spot.sports.any(sport))
+        ordered = list(db.scalars(stmt.order_by(Spot.name).limit(limit)))
+
     set_public_cache(response)
     return [SpotSummary.from_orm_spot(s) for s in ordered]
 

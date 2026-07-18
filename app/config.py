@@ -104,6 +104,11 @@ class Settings(BaseSettings):
     # (FEATURED_WARMUP_ENABLED=true). Interval bounds the worst-case cold window.
     featured_warmup_enabled: bool = False
     featured_warmup_interval: int = 1800
+    # Wall-clock budget (seconds) for computing the Top-Spots ranking on a cache
+    # miss. Once exceeded, remaining spots skip the live forecast fetch and use
+    # cheap climatology instead — so the request stays bounded and never times out
+    # behind a gateway / serverless limit. 0 disables the budget (fetch all).
+    featured_compute_budget_seconds: float = 6.0
 
     # When true, a queued ERA5 job is processed automatically in the background
     # (on spot create and on the "ERA5 anstoßen" trigger) instead of waiting for

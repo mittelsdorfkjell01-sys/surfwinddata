@@ -100,3 +100,63 @@ def test_service_uses_cache_on_second_call(seeded):
     discovery.top_spot_ids(seeded, client=fake, cache=cache, today=day)
     # Second call served from cache — no further forecast fetches.
     assert fake.forecast_calls == calls_after_first
+
+
+# --- resilience: the widget must never 500 ---------------------------------
+
+class _ThrowingClient:
+    """Open-Meteo double that always fails — simulates the provider being down /
+    rate-limiting / timing out (the likely production 500 trigger)."""
+
+    def fetch_forecast(self, *a, **k):
+        raise RuntimeError("open-meteo unreachable")
+
+    def fetch_marine(self, *a, **k):
+        raise RuntimeError("open-meteo unreachable")
+
+
+def test_endpoint_survives_forecast_provider_down(client, seeded, fake_live):
+    # Provider down -> per-spot fallback to climatology; must NOT 500.
+    app.dependency_overrides[get_om_client] = lambda: _ThrowingClient()
+    resp = client.get("/spots/top?limit=5")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert 0 < len(body) <= 5
+    assert all(item["status"] == "published" for item in body)
+
+
+def test_service_does_not_raise_when_provider_down(seeded):
+    ids = discovery.top_spot_ids(
+        seeded, limit=5, client=_ThrowingClient(), cache=InMemoryCache(),
+        today=date(2026, 7, 18),
+    )
+    assert 0 < len(ids) <= 5
+
+
+def test_service_survives_unknown_sport(seeded):
+    # A spot whose sport has no scoring params used to KeyError in the (unguarded)
+    # climatology fallback and 500 the whole endpoint. Mutate in-memory only.
+    spot = seeded.scalars(select(Spot).where(Spot.status == "published")).first()
+    spot.sports = ["foil"]  # not in SCORING_PARAMS_V1
+    ids = discovery.top_spot_ids(
+        seeded, limit=5, client=FakeOpenMeteoClient(), cache=InMemoryCache(),
+        today=date(2026, 7, 18),
+    )
+    assert 0 < len(ids) <= 5
+
+
+def test_endpoint_degrades_to_published_list_on_error(
+    client, seeded, fake_live, monkeypatch
+):
+    # Even an unexpected failure inside the ranking degrades to a published list.
+    import app.api.spots as spots_api
+
+    def _boom(*a, **k):
+        raise RuntimeError("ranking blew up")
+
+    monkeypatch.setattr(spots_api.discovery, "top_spot_ids", _boom)
+    resp = client.get("/spots/top?limit=5")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert 0 < len(body) <= 5
+    assert all(item["status"] == "published" for item in body)

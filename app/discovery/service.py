@@ -10,12 +10,14 @@ underlying weather data is usually already warm.
 from __future__ import annotations
 
 import logging
+import time as _clock
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, defer
 
+from app.config import get_settings
 from app.community.aggregate import bayesian_score, global_mean
 from app.discovery import featured
 from app.live.cache import Cache, default_cache
@@ -185,6 +187,61 @@ def _climatology_day_qualities(spot: Spot, day: date, db: Session) -> list[float
     return [pct] * MAX_FORECAST_DAYS
 
 
+def _safe_rollback(db: Session) -> None:
+    """Clear a possibly-poisoned transaction so later queries in the loop work.
+
+    A failed statement leaves the session needing a rollback before any further
+    query; without this, one bad spot would cascade PendingRollbackError into
+    every spot after it. Best-effort — a failing rollback is itself swallowed."""
+    try:
+        db.rollback()
+    except Exception:
+        pass
+
+
+def _spot_day_qualities(
+    spot: Spot,
+    day: date,
+    *,
+    allow_forecast: bool,
+    db: Session,
+    client: OpenMeteoClient,
+    cache: Cache,
+) -> list[float]:
+    """Per-day wind quality for one spot — **fully fault-isolated, never raises**.
+
+    Tries the live 7-day forecast (only when ``allow_forecast``, i.e. within the
+    compute time budget); on any failure — or when the budget is spent — falls
+    back to cheap climatology. A total failure yields ``[]`` (zero wind signals),
+    so the spot still ranks on popularity + seed instead of 500-ing the endpoint.
+    """
+    if allow_forecast:
+        try:
+            coords = _spot_coords(spot)
+            if coords is not None:
+                return _forecast_day_qualities(
+                    spot, coords, db=db, client=client, cache=cache
+                )
+        except Exception as exc:  # HTTP error/timeout, bad data, DB hiccup …
+            logger.warning(
+                "featured: forecast unavailable for %s (%s) — climatology fallback",
+                spot.id,
+                exc,
+            )
+            _safe_rollback(db)
+
+    try:
+        return _climatology_day_qualities(spot, day, db)
+    except Exception as exc:  # e.g. unknown sport / missing climatology
+        logger.warning(
+            "featured: climatology fallback failed for %s (%s) — zero wind signals",
+            spot.id,
+            exc,
+        )
+        _safe_rollback(db)
+        return []
+
+
 # --- public entry point ----------------------------------------------------
 
 def _compute(
@@ -199,23 +256,15 @@ def _compute(
     candidates = _load_candidates(db, sport)
     ratings, favorites, mean = _popularity_index(db)
 
+    budget = get_settings().featured_compute_budget_seconds
+    deadline = (_clock.monotonic() + budget) if budget and budget > 0 else None
+
     rows: list[dict] = []
     for spot in candidates:
-        coords = _spot_coords(spot)
-        try:
-            if coords is None:
-                raise LookupError("spot has no location")
-            qualities = _forecast_day_qualities(
-                spot, coords, db=db, client=client, cache=cache
-            )
-        except Exception as exc:  # forecast fetch / evaluation failed — degrade
-            logger.warning(
-                "featured: forecast unavailable for %s (%s) — climatology fallback",
-                spot.id,
-                exc,
-            )
-            qualities = _climatology_day_qualities(spot, day, db)
-
+        allow_forecast = deadline is None or _clock.monotonic() < deadline
+        qualities = _spot_day_qualities(
+            spot, day, allow_forecast=allow_forecast, db=db, client=client, cache=cache
+        )
         n_ratings, star_sum = ratings.get(spot.id, (0, 0))
         rows.append(
             {
