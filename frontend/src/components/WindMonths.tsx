@@ -2,8 +2,9 @@ import type { MonthWind } from "../lib/types";
 
 /**
  * Yearly wind climatology. Each month is a cluster of thin weekly bars, so you
- * can read both the seasonal trend and the week-to-week spread at a glance.
- * Bar height maps to mean wind (kts); the tallest week sets the top of scale.
+ * can read both the seasonal trend and the week-to-week spread at a glance. Bar
+ * height maps to the average hours of *rideable* wind (≥ 14 kt) per week; the
+ * windiest week sets the top of scale.
  */
 export default function WindMonths({ data }: { data: MonthWind[] }) {
   const max = Math.max(...data.flatMap((m) => m.weeks));
@@ -12,16 +13,16 @@ export default function WindMonths({ data }: { data: MonthWind[] }) {
     <div>
       <div className="mb-1 flex items-baseline justify-between">
         <h3 className="text-[15px] font-semibold text-navy">Windmonate</h3>
-        <span className="text-[12px] text-muted">Ø Wind pro Woche · kts</span>
+        <span className="text-[12px] text-muted">Fahrbarer Wind pro Woche · Std ≥ 14 kt</span>
       </div>
 
       {/* Screen-reader alternative to the bar chart (WCAG 1.1.1). */}
       <table className="sr-only">
-        <caption>Windmonate — durchschnittlicher Wind pro Woche in Knoten</caption>
+        <caption>Windmonate — fahrbare Windstunden pro Woche (≥ 14 kt)</caption>
         <thead>
           <tr>
             <th scope="col">Monat</th>
-            <th scope="col">Ø Wind (kts)</th>
+            <th scope="col">Ø Windstunden/Woche</th>
           </tr>
         </thead>
         <tbody>
@@ -48,7 +49,7 @@ export default function WindMonths({ data }: { data: MonthWind[] }) {
                       strong ? "bg-navy" : "bg-navy/35"
                     }`}
                     style={{ height: `${Math.max(6, (w / max) * 100)}%` }}
-                    title={`${m.month} · W${i + 1}: ${w.toFixed(1)} kts`}
+                    title={`${m.month} · W${i + 1}: ${w.toFixed(1)} h ≥14 kt`}
                   />
                 ))}
               </div>
