@@ -42,15 +42,17 @@ export default function Landing() {
         {/* Hero breathing room pushes the search + top spots to the lower area. */}
         <div className="flex-1" />
 
-        {/* Search — narrower, sitting directly above the Top Spots. */}
+        {/* Search — wide, sitting directly above the Top Spots. */}
         <div className="mb-8 flex justify-center px-4 sm:px-6">
-          <div className="relative z-[1200] w-full max-w-[680px]">
+          <div className="relative z-[1200] w-full max-w-[960px]">
             <SearchBar />
           </div>
         </div>
 
-        {/* aktuelle Top Spots — title left, map button right (same row). */}
-        <div className="mx-auto w-full max-w-[1500px] pb-6">
+        {/* aktuelle Top Spots — title left, map button right (same row). The
+            larger bottom padding lifts the whole search + top-spots block up a bit
+            from the very bottom of the hero. */}
+        <div className="mx-auto w-full max-w-[1500px] pb-16">
           <div className="mb-3 flex items-center justify-between gap-4 px-4 sm:px-10">
             <h2 className="text-[18px] font-semibold text-white drop-shadow">
               aktuelle Top Spots
