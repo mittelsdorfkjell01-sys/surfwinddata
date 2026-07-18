@@ -35,13 +35,15 @@ export default function WindMonths({ data }: { data: MonthWind[] }) {
         </tbody>
       </table>
 
-      <div aria-hidden="true" className="mt-5 flex h-44 items-end gap-2 sm:gap-3">
+      <div aria-hidden="true" className="mt-5 flex items-end gap-2 sm:gap-3">
         {data.map((m) => {
           const monthMean = m.weeks.reduce((a, b) => a + b, 0) / m.weeks.length;
           const strong = monthMean >= max * 0.72;
           return (
             <div key={m.month} className="flex flex-1 flex-col items-center gap-2">
-              <div className="flex h-full w-full items-end justify-center gap-[2px]">
+              {/* Explicit height so the bars' percentage heights resolve (a `%`
+                  height needs a parent with a definite height, not `h-full`). */}
+              <div className="flex h-44 w-full items-end justify-center gap-[2px]">
                 {m.weeks.map((w, i) => (
                   <div
                     key={i}
