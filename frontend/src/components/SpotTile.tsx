@@ -58,7 +58,7 @@ export default function SpotTile({
   return (
     <Link
       to={`/spot/${id}`}
-      className="group relative block h-[220px] w-full overflow-hidden rounded-3xl"
+      className="group relative block h-[190px] w-full overflow-hidden rounded-3xl"
     >
       <div className="absolute inset-0">
         <SpotImage

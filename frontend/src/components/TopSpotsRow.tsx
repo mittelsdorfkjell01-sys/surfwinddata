@@ -10,7 +10,7 @@ function RowSkeleton() {
   return (
     <div className={GRID}>
       {Array.from({ length: MAX_TILES }).map((_, i) => (
-        <div key={i} className="h-[220px] animate-pulse rounded-3xl bg-white/20" />
+        <div key={i} className="h-[190px] animate-pulse rounded-3xl bg-white/20" />
       ))}
     </div>
   );
