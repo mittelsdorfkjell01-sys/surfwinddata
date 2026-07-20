@@ -5,9 +5,10 @@ import AccountMenu from "./AccountMenu";
 /**
  * Floating top bar shared by the map and search pages: brand centred, account
  * menu right. The Welle/Wind toggle was removed — the sport is chosen on the
- * results, not in the page chrome.
+ * results, not in the page chrome. The map hides the account menu (`showAccount
+ * = false`) — its own close button already covers leaving the page.
  */
-export default function Header() {
+export default function Header({ showAccount = true }: { showAccount?: boolean }) {
   return (
     <header className="pointer-events-none absolute inset-x-0 top-0 z-[1000]">
       <div className="mx-auto max-w-[1400px] px-4 pt-4 sm:px-8 sm:pt-6">
@@ -23,7 +24,7 @@ export default function Header() {
           </Link>
 
           <div className="col-start-3 justify-self-end">
-            <AccountMenu />
+            {showAccount && <AccountMenu />}
           </div>
         </div>
       </div>

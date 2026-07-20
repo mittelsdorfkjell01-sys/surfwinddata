@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import L, { type Map as LeafletMap } from "leaflet";
 import Header from "../components/Header";
 import MapSpotCard from "../components/MapSpotCard";
-import { ChevronDownIcon, CloseIcon, MinusIcon, PlusIcon } from "../lib/icons";
+import { CloseIcon, MinusIcon, PlusIcon } from "../lib/icons";
 import { useSpots } from "../lib/hooks";
 
 /** Navy teardrop pin as a Leaflet divIcon. */
@@ -22,18 +22,8 @@ const pinIcon = L.divIcon({
 
 export default function MapView() {
   const navigate = useNavigate();
-  const location = useLocation();
   const [map, setMap] = useState<LeafletMap | null>(null);
   const { data: spots } = useSpots({ status: "published" });
-
-  // "Zurück" returns to the page that opened the map (passed via router state).
-  // Falls back to real browser-back, then to the landing page.
-  const goBack = () => {
-    const from = (location.state as { from?: string } | null)?.from;
-    if (from) navigate(from);
-    else if (window.history.length > 1) navigate(-1);
-    else navigate("/");
-  };
 
   const withCoords = useMemo(
     () => (spots ?? []).filter((s) => s.coords),
@@ -49,7 +39,7 @@ export default function MapView() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden">
-      <Header />
+      <Header showAccount={false} />
       <h1 className="sr-only">Spot-Karte</h1>
 
       <MapContainer
@@ -75,20 +65,6 @@ export default function MapView() {
           </Marker>
         ))}
       </MapContainer>
-
-      {/* Back — landing-style pill, top-left, returns to the opening page. Tucked
-          below the header brand so it never overlaps it. */}
-      <div className="pointer-events-none absolute left-4 top-20 z-[900] sm:left-6 sm:top-24">
-        <button
-          type="button"
-          aria-label="Zurück"
-          onClick={goBack}
-          className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-white/95 py-2 pl-2.5 pr-4 text-[14px] font-medium text-brand-teal shadow-bar backdrop-blur transition-colors hover:bg-white"
-        >
-          <ChevronDownIcon className="rotate-90 text-[18px]" />
-          Zurück
-        </button>
-      </div>
 
       {/* Top-right controls: close (→ landing) + zoom */}
       <div className="pointer-events-none absolute right-4 top-4 z-[900] flex flex-col items-end gap-3 sm:right-6 sm:top-6">

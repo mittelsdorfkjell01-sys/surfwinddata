@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import L from "leaflet";
 import LandingHeader from "../components/LandingHeader";
@@ -11,6 +11,7 @@ import SortDropdown from "../components/SortDropdown";
 import Footer from "../components/Footer";
 import { EditorialHero, SectionBand, Lede } from "../components/editorial";
 import { EmptyState, ErrorBanner, SpotGridSkeleton } from "../components/AsyncStates";
+import { ChevronDownIcon } from "../lib/icons";
 import type { RegionInfo } from "../lib/types";
 import { usableMediaUrl } from "../lib/api";
 import { useRegions, useSpots, useRegionSeason, useBestWeeks } from "../lib/hooks";
@@ -38,6 +39,8 @@ const pinIcon = L.divIcon({
 
 export default function RegionDetail() {
   const { slug } = useParams();
+  const navigate = useNavigate();
+  const goBack = () => (window.history.length > 1 ? navigate(-1) : navigate("/"));
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = parseFilters(searchParams);
   const setFilters = (next: FilterState) =>
@@ -165,7 +168,17 @@ export default function RegionDetail() {
           kicker={region.country || undefined}
           title={region.name}
           meta={spotCount}
-        />
+        >
+          <button
+            type="button"
+            onClick={goBack}
+            aria-label="Zurück"
+            className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-white/95 py-2 pl-2.5 pr-4 text-[14px] font-medium text-brand-teal shadow-pill backdrop-blur transition-colors hover:bg-white"
+          >
+            <ChevronDownIcon className="rotate-90 text-[18px]" />
+            Zurück
+          </button>
+        </EditorialHero>
 
         {/* Breadcrumb */}
         <div className="mx-auto max-w-[1180px] px-4 pt-6 sm:px-8">
