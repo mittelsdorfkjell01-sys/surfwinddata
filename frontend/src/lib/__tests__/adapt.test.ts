@@ -40,7 +40,7 @@ describe("adaptSpot", () => {
     expect(s.id).toBe("uuid-1");
     expect(s.uuid).toBe("uuid-1");
     expect(s.coords).toEqual([54.4, 10.2]);
-    expect(s.region).toBe("Kieler Bucht, DE");
+    expect(s.region).toBe("Kieler Bucht, Deutschland");
     expect(s.level).toBe("beginner");
     expect(s.waterCharacter).toBe("chop");
     expect(s.style).toEqual(["freeride"]);
@@ -77,7 +77,7 @@ describe("adaptSpot", () => {
 
 describe("regionLabel", () => {
   it("joins name and country, tolerates missing country", () => {
-    expect(regionLabel(region)).toBe("Kieler Bucht, DE");
+    expect(regionLabel(region)).toBe("Kieler Bucht, Deutschland");
     expect(regionLabel({ ...region, country: null })).toBe("Kieler Bucht");
     expect(regionLabel(undefined)).toBe("");
   });
