@@ -2,6 +2,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import LandingHeader from "../components/LandingHeader";
 import Facilities from "../components/Facilities";
 import SpotFlowMap from "../components/SpotFlowMap";
+import SpotSubnav from "../components/SpotSubnav";
 import Forecast from "../components/Forecast";
 import WindMonths from "../components/WindMonths";
 import SimilarSpots from "../components/SimilarSpots";
@@ -39,7 +40,7 @@ export default function SpotDetail() {
     return (
       <div className="relative min-h-screen bg-white">
         <LandingHeader />
-        <div className="h-[72vh] min-h-[560px] w-full animate-pulse bg-navy-soft" />
+        <div className="hero-h w-full animate-pulse bg-navy-soft" />
         <div className="mx-auto max-w-[1180px] px-4 pt-16 sm:px-8">
           <div className="h-8 w-2/3 animate-pulse rounded bg-line" />
           <div className="mt-4 h-4 w-full animate-pulse rounded bg-line" />
@@ -84,15 +85,32 @@ export default function SpotDetail() {
     { label: spot.name },
   ].filter((c): c is { label: string; to?: string } => Boolean(c));
 
+  const sections = [
+    { id: "ueberblick", label: "Überblick" },
+    { id: "karte", label: "Wind & Wellen" },
+    { id: "saison", label: "Saison" },
+    { id: "community", label: "Community" },
+    { id: "aehnliche", label: "Ähnliche Spots" },
+  ];
+
   return (
     <div className="relative min-h-screen bg-white">
       <LandingHeader />
+      <SpotSubnav
+        name={spot.name}
+        wind={currentWind}
+        windDir={windDir}
+        breadcrumb={breadcrumb}
+        sections={sections}
+        onBack={goBack}
+      />
 
       <main>
         <EditorialHero
           image={spot.hero}
           focal={spot.heroFocal}
           alt={spot.name}
+          credit={spot.heroCredit}
           kicker={
             <Link
               to={`/region/${regionSlug(spot.region)}`}
@@ -127,28 +145,8 @@ export default function SpotDetail() {
           <ConditionsBand live={live} variant="card" />
         </div>
 
-        {/* Breadcrumb */}
-        <div className="mx-auto max-w-[1180px] px-4 pt-6 sm:px-8">
-          <nav className="text-label font-medium text-navy/60">
-            {breadcrumb.map((crumb, i) => (
-              <span key={crumb.label + i}>
-                {i > 0 && <span className="mx-1.5 text-muted">›</span>}
-                {crumb.to ? (
-                  <Link to={crumb.to} className="transition-colors hover:text-navy hover:underline">
-                    {crumb.label}
-                  </Link>
-                ) : (
-                  <span className={i === breadcrumb.length - 1 ? "text-brand-teal" : ""}>
-                    {crumb.label}
-                  </span>
-                )}
-              </span>
-            ))}
-          </nav>
-        </div>
-
         {/* 01 — Überblick: lede + sticky spec rail */}
-        <SectionBand tone="white" kicker="01 — Überblick">
+        <SectionBand id="ueberblick" tone="white" kicker="01 — Überblick">
           <div className="grid gap-x-16 gap-y-12 lg:grid-cols-12">
             <div className="lg:col-span-7">
               <Lede dropcap>{spot.description}</Lede>
@@ -162,9 +160,18 @@ export default function SpotDetail() {
           </div>
         </SectionBand>
 
-        {/* Signature: the animated wind & wave flow map */}
-        <SectionBand tone="white" heading="Wind & Wellen an diesem Spot">
-          <div className="rounded-3xl shadow-card">
+        {/* 02 — Wind & Wellen: centered narrow intro, then the full-bleed flow map */}
+        <SectionBand
+          id="karte"
+          tone="white"
+          width="narrow"
+          align="center"
+          kicker="02 — Wind & Wellen"
+          heading="Wie es hier läuft"
+          intro="Windstreifen ziehen mit dem Wind, Wellenlinien laufen auf die Küste zu — live aus den aktuellen Bedingungen."
+        />
+        <SectionBand tone="white" width="bleed" pad="md">
+          <div className="relative">
             <SpotFlowMap
               coords={coords}
               windDir={windDir}
@@ -175,17 +182,24 @@ export default function SpotDetail() {
               waterType={waterType}
               zoom={spot.mapView?.zoom}
               mapCenter={spot.mapView?.center}
+              rounded={false}
             />
+            <div className="glass-white pointer-events-none absolute bottom-4 left-4 z-10 flex items-center gap-4 rounded-full px-4 py-2 text-caption text-navy">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-0.5 w-4 rounded-full bg-navy/60" />
+                Wind
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-0.5 w-4 rounded-full bg-[#2F6FB0]" />
+                Welle
+              </span>
+            </div>
           </div>
-          <p className="mt-4 text-caption text-muted">
-            Windstreifen ziehen mit dem Wind, Wellenlinien laufen auf die Küste zu —
-            live aus den aktuellen Bedingungen.
-          </p>
         </SectionBand>
 
         {/* Timing: 7-day forecast + yearly wind rhythm */}
         {(forecastLoading || forecastDays?.length || months) && (
-          <SectionBand tone="cream" heading="Wann läuft's?">
+          <SectionBand id="saison" tone="cream" heading="Wann läuft's?">
             {forecastLoading && <div className="h-56 animate-pulse rounded-3xl bg-line" />}
             {!forecastLoading && forecastDays && forecastDays.length > 0 && (
               <Forecast days={forecastDays} />
@@ -210,6 +224,7 @@ export default function SpotDetail() {
         {/* Community */}
         {id && (
           <SectionBand
+            id="community"
             tone="cream"
             heading="Community"
             intro="Erfahrungen, Tipps und Bilder von anderen vor Ort. Bitte fair und sachlich bleiben."
@@ -220,6 +235,7 @@ export default function SpotDetail() {
 
         {/* Ähnliche Spots */}
         <SectionBand
+          id="aehnliche"
           tone="white"
           heading="Ähnliche Spots"
           intro="Vergleichbare Reviere nach Charakter und Windstärke"

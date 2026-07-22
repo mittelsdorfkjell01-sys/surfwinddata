@@ -31,6 +31,7 @@ const TONE_BG: Record<Tone, string> = {
  * hidden tabs). Motion lives in the specific pieces that need it.
  */
 export default function SectionBand({
+  id,
   tone = "white",
   width = "content",
   pad = "lg",
@@ -41,6 +42,9 @@ export default function SectionBand({
   className = "",
   children,
 }: {
+  /** Anchor id for the sticky subnav's jump links. `scroll-mt-24` is applied
+   *  alongside it so the target doesn't land underneath the subnav bar. */
+  id?: string;
   tone?: Tone;
   width?: Width;
   pad?: Pad;
@@ -49,14 +53,16 @@ export default function SectionBand({
   heading?: string;
   intro?: string;
   className?: string;
-  children: ReactNode;
+  /** Optional — omit for a header-only band (kicker/heading/intro with no
+   *  body), e.g. a centered intro that precedes a separate full-bleed section. */
+  children?: ReactNode;
 }) {
   const isBleed = width === "bleed";
   const isNavy = tone === "navy";
   const hasHeader = Boolean(kicker || heading || intro);
 
   return (
-    <section className={TONE_BG[tone]}>
+    <section id={id} className={`${id ? "scroll-mt-24" : ""} ${TONE_BG[tone]}`}>
       <div
         className={`mx-auto ${WIDTH_MAX[width]} ${
           isBleed ? "px-0" : "px-4 sm:px-8"
@@ -93,7 +99,7 @@ export default function SectionBand({
             )}
           </div>
         )}
-        {hasHeader ? <div className="mt-8">{children}</div> : children}
+        {hasHeader && children != null ? <div className="mt-8">{children}</div> : children}
       </div>
     </section>
   );

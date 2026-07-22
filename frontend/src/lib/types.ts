@@ -22,6 +22,7 @@ export interface Spot {
   image: string; // "" = no image → branded fallback
   hero?: string;
   heroFocal?: { x: number; y: number } | null; // object-position % for the crop
+  heroCredit?: string; // photographer name / Instagram tag, shown in the hero corner
   coords?: [number, number]; // [lat, lng]
   windDir?: number; // degrees the wind comes FROM
   waveDir?: number;

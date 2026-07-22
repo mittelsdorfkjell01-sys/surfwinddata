@@ -95,7 +95,7 @@ export default function RegionDetail() {
     return (
       <div className="relative min-h-screen bg-white">
         <LandingHeader />
-        <div className="h-[72vh] min-h-[560px] w-full animate-pulse bg-navy-soft" />
+        <div className="hero-h w-full animate-pulse bg-navy-soft" />
         <div className="mx-auto max-w-[1180px] px-4 pt-16 sm:px-8">
           <div className="mb-10 h-8 w-64 animate-pulse rounded bg-line" />
           <SpotGridSkeleton />

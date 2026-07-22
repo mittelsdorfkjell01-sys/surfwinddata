@@ -1,10 +1,10 @@
-import { motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import type { ReactNode } from "react";
 import HeroImage from "../HeroImage";
 
 /**
  * Full-bleed editorial hero. Two states, both deliberately designed:
- *  • with photo → cinematic HeroImage, focal-point aware, gentle load-scale.
+ *  • with photo → cinematic HeroImage, focal-point aware, scroll parallax.
  *  • without photo → a brand colour field (.editorial-hero-fallback) with a
  *    faint animated wind motif, so a missing image never reads as empty/broken.
  *
@@ -19,6 +19,7 @@ export default function EditorialHero({
   kicker,
   title,
   meta,
+  credit,
   children,
 }: {
   image?: string | null;
@@ -27,18 +28,29 @@ export default function EditorialHero({
   kicker?: ReactNode;
   title: string;
   meta?: ReactNode;
+  /** Photographer name / Instagram tag, shown small in the hero's bottom
+   *  corner. Plain text only — there's no credit-URL field in the data model
+   *  yet, so this never renders as a link. */
+  credit?: string;
   children?: ReactNode;
 }) {
   const reduce = useReducedMotion();
+  const { scrollY } = useScroll();
+
+  // Image parallax: the wrapper is pre-inflated by the max travel distance
+  // (60px top + 60px bottom = the 120px range the spec calls for) so the
+  // translate never uncovers the navy background at the top edge — a literal
+  // [0,120] range would open exactly that gap, since the image sits flush
+  // with the container at rest.
+  const imageY = useTransform(scrollY, [0, 600], [-60, 60]);
+  const titleY = useTransform(scrollY, [0, 400], [0, -40]);
 
   return (
-    <section className="relative h-[72vh] min-h-[560px] w-full overflow-hidden bg-navy">
+    <section className="hero-h relative w-full overflow-hidden bg-navy">
       {image ? (
         <motion.div
-          initial={reduce ? false : { scale: 1.06 }}
-          animate={{ scale: 1 }}
-          transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
-          className="absolute inset-0"
+          className="absolute inset-x-0"
+          style={{ top: -60, bottom: -60, y: reduce ? 0 : imageY }}
         >
           <HeroImage
             src={image}
@@ -61,28 +73,57 @@ export default function EditorialHero({
         </div>
       )}
 
-      {/* scrim for legibility */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/15 to-black/25" />
+      {/* scrim: bottom layer for title legibility, top layer for the header */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(to top, rgba(0,0,0,.72) 0%, rgba(0,0,0,.45) 22%, rgba(0,0,0,.12) 48%, transparent 70%)",
+        }}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-40"
+        style={{ backgroundImage: "linear-gradient(to bottom, rgba(0,0,0,.35), transparent)" }}
+      />
 
       {/* top slot (back pill etc.) */}
       {children && (
-        <div className="pointer-events-none absolute inset-x-0 top-[104px] z-20 sm:top-[120px]">
+        <div className="pointer-events-none absolute inset-x-0 top-[88px] z-20 sm:top-[120px]">
           <div className="mx-auto flex max-w-[1180px] px-4 sm:px-8">{children}</div>
         </div>
       )}
 
       {/* headline block */}
-      <div className="absolute inset-x-0 bottom-0 z-10">
+      <motion.div
+        className="absolute inset-x-0 bottom-0 z-10"
+        style={{ y: reduce ? 0 : titleY }}
+      >
         <div className="mx-auto max-w-[1180px] px-4 pb-10 sm:px-8 sm:pb-14">
           {kicker && (
             <div className="mb-3 text-label font-semibold uppercase tracking-[0.16em] text-white/85">
               {kicker}
             </div>
           )}
-          <h1 className="text-display-1 font-bold text-white text-balance drop-shadow-[0_2px_14px_rgba(0,0,0,0.4)]">
-            {title}
-          </h1>
+          <h1 className="text-display-1 font-bold text-white text-balance">{title}</h1>
           {meta && <div className="mt-3 text-body font-medium text-white/90">{meta}</div>}
+        </div>
+      </motion.div>
+
+      {/* credit */}
+      {credit && (
+        <div className="pointer-events-none absolute bottom-4 right-4 z-10 text-caption tracking-wide text-white/55 sm:bottom-6 sm:right-8">
+          {credit}
+        </div>
+      )}
+
+      {/* scroll hint — signals there's more below; a longform cue, not a UI control */}
+      <div aria-hidden="true" className="absolute inset-x-0 bottom-3 z-10 flex justify-center">
+        <div className="relative h-12 w-px overflow-hidden bg-white/40">
+          {!reduce && (
+            <span className="animate-swd-scroll-hint absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-transparent via-white to-transparent" />
+          )}
         </div>
       </div>
     </section>

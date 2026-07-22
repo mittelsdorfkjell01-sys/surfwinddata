@@ -103,6 +103,18 @@
       radial-gradient(120% 100% at 15% 0%, rgba(30, 110, 126, 0.55), transparent 60%),
       linear-gradient(160deg, #13335e 0%, #2c4e7e 55%, #1e6e7e 100%);
   }
+
+  /* EditorialHero's height. `dvh` accounts for mobile browser chrome
+     show/hide so the hero doesn't jump; the `vh` line before it is a plain
+     fallback for browsers that don't parse `dvh` — an unsupported value drops
+     the whole declaration, leaving the first one in place. Two Tailwind
+     utility classes can't express this (cascade order between two separate
+     generated rules isn't guaranteed), hence a hand-written rule. */
+  .hero-h {
+    height: 72vh;
+    height: 72dvh;
+    min-height: 560px;
+  }
 }
 
 @layer base {
@@ -179,6 +191,24 @@
   .swd-wave-chop,
   .swd-wave-swell,
   .swd-wave-flat {
+    animation: none;
+  }
+}
+
+/* Hero scroll hint — a bright segment loops down a faint 1px track, signalling
+   there's more page below (a longform cue). */
+@keyframes swd-scroll-hint {
+  0% { transform: translateY(-100%); opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { transform: translateY(200%); opacity: 0; }
+}
+.animate-swd-scroll-hint {
+  animation: swd-scroll-hint 2.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-swd-scroll-hint {
     animation: none;
   }
 }

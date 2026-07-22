@@ -46,6 +46,8 @@ export default function SpotFlowMap({
   waterType,
   zoom,
   mapCenter,
+  aspect = "sm:aspect-[21/9]",
+  rounded = true,
 }: {
   coords: [number, number];
   windDir: number; // degrees wind comes FROM
@@ -56,6 +58,14 @@ export default function SpotFlowMap({
   waterType: WaterType;
   zoom?: number; // admin-set preview zoom (default MAP_ZOOM)
   mapCenter?: [number, number]; // admin-set preview center (default = coords)
+  /** Desktop/tablet aspect ratio, as a full `sm:`-prefixed utility class (it
+   *  has to appear literally somewhere in source for Tailwind's scanner to
+   *  generate it — that's why this isn't just a bare ratio string). Mobile is
+   *  always the taller `aspect-[4/5]` — coastal spots show more of what
+   *  matters in portrait. */
+  aspect?: string;
+  /** Off for the full-bleed page treatment, where the map runs edge to edge. */
+  rounded?: boolean;
 }) {
   // Effective framing: admin's saved view wins, else default (spot-centred).
   const effZoom = zoom ?? MAP_ZOOM;
@@ -91,7 +101,10 @@ export default function SpotFlowMap({
     const vy = wv.y * windSpeed;
     const trailMax = Math.round(22 + windKts * 2.4);
     const perp = { x: -wv.y, y: wv.x }; // for the arrowheads
-    const N = Math.max(50, Math.min(170, Math.round((w * h) / 1900)));
+    // Cap raised from the original 170 for the Sprint 3 full-bleed variant —
+    // at ~21:9 on a wide viewport the canvas area is several times the old
+    // fixed 360px-tall box, and the old cap left the streaks looking thin.
+    const N = Math.max(50, Math.min(340, Math.round((w * h) / 1900)));
     type P = { x: number; y: number; life: number; max: number; trail: number[][] };
     const seedTrail = (x: number, y: number) => {
       const t: number[][] = [];
@@ -377,7 +390,10 @@ export default function SpotFlowMap({
   }, [effCenter[0], effCenter[1], effZoom, windDir, windKts, waveDir, coast, period, waterType]);
 
   return (
-    <div ref={wrapRef} className="relative h-[360px] overflow-hidden rounded-2xl">
+    <div
+      ref={wrapRef}
+      className={`relative aspect-[4/5] w-full overflow-hidden ${aspect} ${rounded ? "rounded-3xl" : ""}`}
+    >
       <MapContainer
         center={effCenter}
         zoom={effZoom}

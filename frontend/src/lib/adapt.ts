@@ -49,6 +49,7 @@ export function adaptSpot(
     image: resolveMediaUrl(s.image?.url) ?? "",
     hero: resolveMediaUrl(s.image?.url),
     heroFocal: s.image?.focal ?? null,
+    heroCredit: s.image?.credit,
     coords,
     windDir: s.facing ?? undefined,
     sports: s.sports,
