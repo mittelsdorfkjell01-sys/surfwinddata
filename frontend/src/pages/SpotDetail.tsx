@@ -77,7 +77,12 @@ export default function SpotDetail() {
   const windDir = live?.current.dir ?? spot.windDir ?? 320;
   const regionName = spot.region.split(",")[0].trim() || spot.name;
   const parts = spot.region.split(",").map((p) => p.trim());
-  const breadcrumb = [parts[1], parts[0], spot.name].filter(Boolean) as string[];
+  const [regionPart, country] = parts;
+  const breadcrumb: { label: string; to?: string }[] = [
+    country ? { label: country } : undefined,
+    regionPart ? { label: regionPart, to: `/region/${regionSlug(spot.region)}` } : undefined,
+    { label: spot.name },
+  ].filter((c): c is { label: string; to?: string } => Boolean(c));
 
   return (
     <div className="relative min-h-screen bg-white">
@@ -121,11 +126,17 @@ export default function SpotDetail() {
         <div className="mx-auto max-w-[1180px] px-4 pt-6 sm:px-8">
           <nav className="text-[13px] font-medium text-navy/60">
             {breadcrumb.map((crumb, i) => (
-              <span key={crumb}>
+              <span key={crumb.label + i}>
                 {i > 0 && <span className="mx-1.5 text-muted">›</span>}
-                <span className={i === breadcrumb.length - 1 ? "text-brand-teal" : ""}>
-                  {crumb}
-                </span>
+                {crumb.to ? (
+                  <Link to={crumb.to} className="transition-colors hover:text-navy hover:underline">
+                    {crumb.label}
+                  </Link>
+                ) : (
+                  <span className={i === breadcrumb.length - 1 ? "text-brand-teal" : ""}>
+                    {crumb.label}
+                  </span>
+                )}
               </span>
             ))}
           </nav>

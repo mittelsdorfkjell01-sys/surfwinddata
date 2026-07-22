@@ -4,10 +4,11 @@
 
 import type { Spot } from "./types";
 import { resolveMediaUrl, type Region, type SpotRead, type SpotSummary } from "./api";
+import { countryName } from "./flags";
 
 export function regionLabel(region?: Region): string {
   if (!region) return "";
-  return [region.name, region.country].filter(Boolean).join(", ");
+  return [region.name, countryName(region.country)].filter(Boolean).join(", ");
 }
 
 /** Map a backend spot (+ its region) into the frontend `Spot`. */
