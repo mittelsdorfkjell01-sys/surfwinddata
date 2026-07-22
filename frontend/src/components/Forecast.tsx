@@ -1,24 +1,13 @@
 import { useState } from "react";
 import type { ForecastDay } from "../lib/types";
 import { ChevronDownIcon } from "../lib/icons";
+import WindArrow from "./WindArrow";
 
 type WindUnit = "kts" | "ms" | "kmh";
 const WIND_ORDER: WindUnit[] = ["kts", "ms", "kmh"];
 const WIND_FACTOR: Record<WindUnit, number> = { kts: 1, ms: 0.514444, kmh: 1.852 };
 const WIND_LABEL: Record<WindUnit, string> = { kts: "Knoten", ms: "m/s", kmh: "km/h" };
 const WIND_SHORT: Record<WindUnit, string> = { kts: "kts", ms: "m/s", kmh: "km/h" };
-
-/** Tiny wind arrow — points the way the wind blows TO (dir is "comes from"). */
-function DirArrow({ dir }: { dir: number }) {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" className="text-navy">
-      <g transform={`rotate(${(dir + 180) % 360} 12 12)`}>
-        <line x1="12" y1="19" x2="12" y2="6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        <path d="M12 4 L7.5 10 L16.5 10 Z" fill="currentColor" />
-      </g>
-    </svg>
-  );
-}
 
 /** 7-day wind & wave forecast strip. Headless: the section heading lives in
  *  the caller's `SectionBand`. Wind unit cycles Knoten → m/s → km/h; wave
@@ -89,7 +78,7 @@ export default function Forecast({ days }: { days: ForecastDay[] }) {
               <span className="text-caption font-medium text-navy/60">{windUnit}</span>
             </div>
 
-            <DirArrow dir={d.windDir} />
+            <WindArrow dir={d.windDir} className="text-navy" />
 
             <div className="flex flex-col items-center">
               <svg width="18" height="12" viewBox="0 0 24 16" className="text-[#2F6FB0]">

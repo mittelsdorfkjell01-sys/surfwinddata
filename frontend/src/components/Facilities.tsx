@@ -1,7 +1,7 @@
 import type { Facility, FacilityKind } from "../lib/types";
 import { ParkingIcon, SchoolIcon, ShowerIcon, FoodIcon, CampingIcon } from "../lib/icons";
 
-const facilityIcon: Record<FacilityKind, (p: { width?: number; height?: number }) => JSX.Element> = {
+const facilityIcon: Record<FacilityKind, (p: { width?: number; height?: number; className?: string }) => JSX.Element> = {
   parking: ParkingIcon,
   school: SchoolIcon,
   shower: ShowerIcon,
@@ -12,32 +12,66 @@ const facilityIcon: Record<FacilityKind, (p: { width?: number; height?: number }
 /** "Facilities" panel — icon + title + one-line note per amenity. Headless:
  *  the section heading lives in the caller's `SectionBand`. Only known
  *  facilities are passed in (unknown ones are hidden upstream);
- *  demonstrably-absent ones (available === false) render muted. */
-export default function Facilities({ items }: { items: Facility[] }) {
+ *  demonstrably-absent ones (available === false) mute the icon only — the
+ *  note text itself already says "Nicht vorhanden", so a struck-through
+ *  title would just be a second, redundant "disabled" signal.
+ *
+ *  `variant="grid"` (default) is the icon-tile grid; `variant="rail"` is the
+ *  hairline-table look for the sticky spec rail next to the lede.
+ */
+export default function Facilities({
+  items,
+  variant = "grid",
+}: {
+  items: Facility[];
+  variant?: "grid" | "rail";
+}) {
   if (items.length === 0) return null;
+
+  if (variant === "rail") {
+    return (
+      <div>
+        <p className="text-caption font-medium uppercase tracking-[0.18em] text-brand-teal">
+          Vor Ort
+        </p>
+        <dl className="mt-4 divide-y divide-line border-t border-line">
+          {items.map((f) => {
+            const Icon = facilityIcon[f.kind];
+            const absent = f.available === false;
+            return (
+              <div key={f.kind} className="flex items-center justify-between gap-6 py-4">
+                <dt className="flex items-center gap-3">
+                  <Icon width={18} height={18} className={`text-navy/70 ${absent ? "opacity-40" : ""}`} />
+                  <span className="text-body font-medium text-navy">{f.title}</span>
+                </dt>
+                <dd className="text-caption text-muted">{f.note}</dd>
+              </div>
+            );
+          })}
+        </dl>
+      </div>
+    );
+  }
+
   return (
-    <ul className="space-y-4">
+    <div className="grid grid-cols-2 gap-x-12 gap-y-8 md:grid-cols-3">
       {items.map((f) => {
         const Icon = facilityIcon[f.kind];
         const absent = f.available === false;
         return (
-          <li key={f.kind} className={`flex items-start gap-3 ${absent ? "opacity-50" : ""}`}>
-            <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center text-navy">
-              <Icon width={21} height={21} />
+          <div key={f.kind}>
+            <span
+              className={`grid h-11 w-11 place-items-center rounded-full bg-navy/[0.04] text-navy ${
+                absent ? "opacity-40" : ""
+              }`}
+            >
+              <Icon width={22} height={22} />
             </span>
-            <div className="min-w-0">
-              <p
-                className={`text-ui font-medium leading-tight text-navy ${
-                  absent ? "line-through decoration-navy/40" : ""
-                }`}
-              >
-                {f.title}
-              </p>
-              <p className="mt-0.5 text-caption leading-snug text-muted">{f.note}</p>
-            </div>
-          </li>
+            <p className="mt-3 text-ui font-medium leading-tight text-navy">{f.title}</p>
+            <p className="mt-0.5 text-caption leading-snug text-muted">{f.note}</p>
+          </div>
         );
       })}
-    </ul>
+    </div>
   );
 }

@@ -122,6 +122,11 @@ export default function SpotDetail() {
           </button>
         </EditorialHero>
 
+        {/* Conditions now — overlaps the hero's bottom edge, clamping hero to content */}
+        <div className="relative z-20 mx-auto max-w-[1180px] px-4 sm:px-8">
+          <ConditionsBand live={live} variant="card" />
+        </div>
+
         {/* Breadcrumb */}
         <div className="mx-auto max-w-[1180px] px-4 pt-6 sm:px-8">
           <nav className="text-label font-medium text-navy/60">
@@ -142,19 +147,19 @@ export default function SpotDetail() {
           </nav>
         </div>
 
-        {/* Lede + at-a-glance facts */}
-        <SectionBand tone="white">
-          <Lede>{spot.description}</Lede>
-          {facts.length > 0 && (
-            <div className="mt-8">
-              <FactRow items={facts} />
+        {/* 01 — Überblick: lede + sticky spec rail */}
+        <SectionBand tone="white" kicker="01 — Überblick">
+          <div className="grid gap-x-16 gap-y-12 lg:grid-cols-12">
+            <div className="lg:col-span-7">
+              <Lede dropcap>{spot.description}</Lede>
             </div>
-          )}
-        </SectionBand>
-
-        {/* Conditions now — the bold live band */}
-        <SectionBand tone="cream">
-          <ConditionsBand live={live} />
+            <aside className="lg:col-span-4 lg:col-start-9">
+              <div className="space-y-12 lg:sticky lg:top-24">
+                <FactRow items={facts} variant="rail" />
+                {facilities.length > 0 && <Facilities items={facilities} variant="rail" />}
+              </div>
+            </aside>
+          </div>
         </SectionBand>
 
         {/* Signature: the animated wind & wave flow map */}
@@ -199,13 +204,6 @@ export default function SpotDetail() {
                 <WindMonths data={months} />
               </div>
             )}
-          </SectionBand>
-        )}
-
-        {/* Vor Ort */}
-        {facilities.length > 0 && (
-          <SectionBand tone="white" heading="Facilities">
-            <Facilities items={facilities} />
           </SectionBand>
         )}
 
