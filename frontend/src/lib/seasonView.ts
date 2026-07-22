@@ -94,6 +94,61 @@ export function climatologyToMonths(clim: Record<string, any> | null | undefined
   return out.some((m) => m.weeks.some((v) => v > 0)) ? out : null;
 }
 
+/**
+ * The best contiguous season window from a year of monthly wind bars — the
+ * longest run of consecutive months whose mean is within `threshold` of the
+ * year's peak, wrapping across the Dec→Jan boundary (a Nov–Mar season is one
+ * contiguous run, not two). Returns null when the year is too flat to call a
+ * "season" at all (peak and trough within 25% of each other) — an honest
+ * "no highlight" beats a highlight drawn from noise.
+ */
+export function bestSeasonWindow(
+  data: MonthWind[],
+  threshold = 0.65
+): { startMonth: string; endMonth: string; startIndex: number; endIndex: number } | null {
+  if (data.length !== 12) return null;
+  const means = data.map((m) => avg(m.weeks));
+  const max = Math.max(...means);
+  const min = Math.min(...means);
+  if (max <= 0 || (max - min) / max < 0.25) return null;
+
+  const inSeason = means.map((v) => v >= threshold * max);
+
+  if (inSeason.every(Boolean)) {
+    return { startIndex: 0, endIndex: 11, startMonth: MONTHS_FULL[0], endMonth: MONTHS_FULL[11] };
+  }
+
+  // Walk the circle starting right after a month that's NOT in season, so a
+  // run that wraps Dec→Jan is counted as one contiguous stretch rather than
+  // split across the array's start/end.
+  const falseAt = inSeason.findIndex((v) => !v);
+  let bestStart = -1;
+  let bestLen = 0;
+  let runStart = -1;
+  let runLen = 0;
+  for (let k = 0; k < 12; k++) {
+    const i = (falseAt + 1 + k) % 12;
+    if (inSeason[i]) {
+      if (runLen === 0) runStart = i;
+      runLen++;
+      if (runLen > bestLen) {
+        bestLen = runLen;
+        bestStart = runStart;
+      }
+    } else {
+      runLen = 0;
+    }
+  }
+  if (bestStart === -1) return null;
+  const endIndex = (bestStart + bestLen - 1) % 12;
+  return {
+    startIndex: bestStart,
+    endIndex,
+    startMonth: MONTHS_FULL[bestStart],
+    endMonth: MONTHS_FULL[endIndex],
+  };
+}
+
 /** Region season aggregate → monthly "spots working" bars + peak months, or null. */
 export function regionSeasonToView(
   resp: RegionSeasonResponse,

@@ -197,9 +197,16 @@ export default function SpotDetail() {
           </div>
         </SectionBand>
 
-        {/* Timing: 7-day forecast + yearly wind rhythm */}
-        {(forecastLoading || forecastDays?.length || months) && (
-          <SectionBand id="saison" tone="cream" heading="Wann läuft's?">
+        {/* 03 — Saison: the product's actual promise, ahead of the live forecast */}
+        {months && (
+          <SectionBand id="saison" tone="navy" width="wide" kicker="03 — Saison" heading="Wann hierher?">
+            <WindMonths data={months} />
+          </SectionBand>
+        )}
+
+        {/* Die nächsten 7 Tage — small and after, per the season-first hierarchy */}
+        {(forecastLoading || forecastDays?.length) && (
+          <SectionBand tone="white" width="content" pad="md" heading="Die nächsten 7 Tage">
             {forecastLoading && <div className="h-56 animate-pulse rounded-3xl bg-line" />}
             {!forecastLoading && forecastDays && forecastDays.length > 0 && (
               <Forecast days={forecastDays} />
@@ -212,11 +219,6 @@ export default function SpotDetail() {
                     : "Keine Vorhersage-Daten."
                 }
               />
-            )}
-            {months && (
-              <div className="mt-12">
-                <WindMonths data={months} />
-              </div>
             )}
           </SectionBand>
         )}
