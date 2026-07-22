@@ -1,9 +1,9 @@
-// Public community section on the spot page: ratings, local tips and a photo
-// gallery. Content is shown first; the input forms are collapsed behind a button
-// ("Bewerten" / "Kommentar verfassen" / "+") so the page stays calm and reading-
-// first. Names are required (first name, or first + last).
+// Public community section on the spot page: a photo gallery, ratings and
+// local tips. Content is shown first; the input forms are collapsed behind a
+// button ("Bewerten" / "Kommentar verfassen" / "+") so the page stays calm
+// and reading-first. Names are required (first name, or first + last).
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import {
   ApiError,
   getImageLicense,
@@ -22,6 +22,8 @@ import {
 } from "../lib/api";
 import { HERO_REQ, validateHeroFile } from "./ImageUpload";
 import { LEVELS, levelLabel, sportLabel } from "../lib/labels";
+import { QuoteIcon } from "../lib/icons";
+import { Button, Input, Select, Textarea } from "./ui";
 
 const SPORTS = ["kitesurf", "windsurf", "wing", "surf"];
 const REPORT_REASONS: { key: string; label: string }[] = [
@@ -31,38 +33,66 @@ const REPORT_REASONS: { key: string; label: string }[] = [
   { key: "other", label: "Sonstiges" },
 ];
 
-const card = "rounded-2xl border border-line bg-white p-5";
-const input =
-  "w-full rounded-xl border border-navy/15 bg-white px-3 py-2 text-ui text-navy outline-none focus:border-navy/40";
-const primaryBtn =
-  "rounded-xl bg-navy px-4 py-2 text-ui font-medium text-white hover:bg-navy-dark disabled:opacity-50";
-const ghostBtn =
-  "rounded-xl border border-navy/20 bg-white px-4 py-2 text-ui font-medium text-navy hover:bg-navy/5";
+// The gallery bleeds full-width but its text/controls stay aligned to the
+// normal 1180px content column — `max(gutter, centered-gutter)` mirrors
+// SectionBand's own centering math without needing the section's padding.
+const INSET = "pl-4 sm:pl-[max(2rem,calc((100vw-1180px)/2))]";
 
 // Name must be a first name, or first + last (1–2 words, letters only).
 const NAME_RE = /^\p{L}[\p{L}'.-]*(?:\s+\p{L}[\p{L}'.-]*)?$/u;
 const validName = (n: string) => NAME_RE.test(n.trim());
 
-function Stars({ value, size = 16 }: { value: number; size?: number }) {
-  const full = Math.round(value);
+const STAR_PATH =
+  "M12 2.5l2.7 5.6 6.1.9-4.4 4.4 1 6.1L12 16.6l-5.4 2.9 1-6.1-4.4-4.4 6.1-.9L12 2.5Z";
+
+/** Solid single-color star — the clickable rating picker (binary filled/empty
+ *  per star; only the read-only `Stars` below needs fractional fill). */
+function StarIcon({ filled }: { filled: boolean }) {
   return (
-    <span aria-label={`${value} von 5 Sternen`} style={{ fontSize: size }}>
-      <span className="text-brand-orange">{"★".repeat(full)}</span>
-      <span className="text-line">{"★".repeat(5 - full)}</span>
+    <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+      <path d={STAR_PATH} className={filled ? "fill-brand-orange" : "fill-line"} />
+    </svg>
+  );
+}
+
+/** Read-only fractional-fill star row (an orange path clipped to the
+ *  fractional width, over a line-coloured base) — replaces the old ★ text
+ *  glyph, which renders as a colour emoji on some platforms and can't show a
+ *  partial star at all. */
+function Stars({ value, size = 16 }: { value: number; size?: number }) {
+  const uid = useId();
+  return (
+    <span className="inline-flex items-center gap-0.5" aria-label={`${value} von 5 Sternen`}>
+      {[0, 1, 2, 3, 4].map((i) => {
+        const pct = Math.max(0, Math.min(1, value - i));
+        const clipId = `${uid}-${i}`;
+        return (
+          <svg key={i} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+            <defs>
+              <clipPath id={clipId}>
+                <rect x="0" y="0" width={24 * pct} height="24" />
+              </clipPath>
+            </defs>
+            <path d={STAR_PATH} className="fill-line" />
+            <path d={STAR_PATH} className="fill-brand-orange" clipPath={`url(#${clipId})`} />
+          </svg>
+        );
+      })}
     </span>
   );
 }
 
-/** Headless: the section heading lives in the caller's `SectionBand`. */
+/** Ratings (5/12) + Tips (7/12) — headless: the section heading lives in the
+ *  caller's `SectionBand`. The gallery is a separate export, `CommunityGallery`
+ *  below, so the page can run it full-bleed in its own section. */
 export default function SpotCommunity({ spotId }: { spotId: string }) {
   return (
-    <div>
-      <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid gap-x-16 gap-y-12 lg:grid-cols-12">
+      <div className="lg:col-span-5">
         <Ratings spotId={spotId} />
-        <Tips spotId={spotId} />
       </div>
-      <div className="mt-6">
-        <Gallery spotId={spotId} />
+      <div className="lg:col-span-7">
+        <Tips spotId={spotId} />
       </div>
     </div>
   );
@@ -89,27 +119,28 @@ function Ratings({ spotId }: { spotId: string }) {
   }, [spotId]);
 
   return (
-    <div className={card}>
-      {/* Aggregate header */}
-      <div className="flex items-center justify-between">
+    <div className="border-t border-line pt-6">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-title font-semibold text-navy">Bewertungen</h3>
           {agg && agg.count > 0 ? (
-            <div className="mt-1 flex items-center gap-2">
-              <span className="text-title font-semibold text-navy">
-                {agg.avg?.toFixed(1)}
-              </span>
-              <Stars value={agg.avg ?? 0} size={18} />
-              <span className="text-label text-muted">({agg.count})</span>
-            </div>
+            <>
+              <div className="mt-2 flex items-baseline gap-3">
+                <span className="text-stat font-semibold tabular-nums text-navy">
+                  {agg.avg?.toFixed(1)}
+                </span>
+                <Stars value={agg.avg ?? 0} size={18} />
+              </div>
+              <p className="mt-1 text-caption text-muted">{agg.count} Bewertungen</p>
+            </>
           ) : (
-            <p className="mt-1 text-label text-muted">Noch keine Bewertungen.</p>
+            <p className="mt-2 text-label text-muted">Noch keine Bewertungen.</p>
           )}
         </div>
         {!open && (
-          <button type="button" className={ghostBtn} onClick={() => setOpen(true)}>
+          <Button variant="ghost" onClick={() => setOpen(true)}>
             Bewerten
-          </button>
+          </Button>
         )}
       </div>
 
@@ -129,16 +160,16 @@ function Ratings({ spotId }: { spotId: string }) {
 
       {/* Ratings below */}
       {items.length > 0 && (
-        <ul className="mt-4 space-y-3 border-t border-line pt-4">
+        <ul className="mt-6 divide-y divide-line">
           {items.map((r) => (
-            <li key={r.id} className="rounded-xl bg-cream p-3">
+            <li key={r.id} className="py-4">
               <div className="flex items-center justify-between">
                 <Stars value={r.stars} />
                 <span className="text-caption text-muted">
                   {sportLabel(r.sport)} · {levelLabel(r.skill_level)}
                 </span>
               </div>
-              <p className="mt-1 text-ui text-navy/90">{r.conditions}</p>
+              <p className="mt-2 text-ui text-navy/90">{r.conditions}</p>
               <p className="mt-1 text-caption text-muted">— {r.author_name}</p>
             </li>
           ))}
@@ -186,70 +217,70 @@ function RatingForm({
   };
 
   return (
-    <form onSubmit={submit} className="mt-4 rounded-xl bg-navy/5 p-4">
+    <form onSubmit={submit} className="mt-4 rounded-3xl bg-navy/5 p-4">
       <p className="text-label font-medium text-navy">Deine Bewertung</p>
       {/* clickable stars */}
-      <div className="mt-2 flex gap-1 text-title leading-none">
+      <div className="mt-2 flex gap-1">
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
             type="button"
             aria-label={`${n} Sterne`}
             onClick={() => setStars(n)}
-            className={n <= stars ? "text-brand-orange" : "text-line hover:text-brand-orange/50"}
+            className="transition-transform hover:scale-110"
           >
-            ★
+            <StarIcon filled={n <= stars} />
           </button>
         ))}
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         <label className="text-label text-muted">
           Level
-          <select value={skill} onChange={(e) => setSkill(e.target.value)} className={`mt-1 ${input}`}>
+          <Select value={skill} onChange={(e) => setSkill(e.target.value)} className="mt-1">
             {LEVELS.map((l) => (
               <option key={l} value={l}>{levelLabel(l)}</option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="text-label text-muted">
           Sportart
-          <select value={sport} onChange={(e) => setSport(e.target.value)} className={`mt-1 ${input}`}>
+          <Select value={sport} onChange={(e) => setSport(e.target.value)} className="mt-1">
             {SPORTS.map((s) => (
               <option key={s} value={s}>{sportLabel(s)}</option>
             ))}
-          </select>
+          </Select>
         </label>
       </div>
-      <textarea
+      <Textarea
         required
         value={conditions}
         onChange={(e) => setConditions(e.target.value)}
         placeholder="Welche Bedingungen bist du gefahren? (Pflichtfeld)"
-        className={`mt-2 ${input}`}
+        className="mt-2"
         rows={2}
       />
-      <input
+      <Input
         value={author}
         onChange={(e) => setAuthor(e.target.value)}
         placeholder="Vorname oder Vor- und Nachname (Pflichtfeld)"
-        className={`mt-2 ${input}`}
+        className="mt-2"
         required
       />
       <Honeypot value={website} onChange={setWebsite} />
       {error && <p role="alert" className="mt-2 text-label text-red-600">{error}</p>}
       <div className="mt-3 flex gap-2">
-        <button type="submit" disabled={busy || !conditions.trim()} className={primaryBtn}>
+        <Button type="submit" disabled={busy || !conditions.trim()}>
           {busy ? "Senden…" : "Bewertung abgeben"}
-        </button>
-        <button type="button" onClick={onCancel} className={ghostBtn}>
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>
           Abbrechen
-        </button>
+        </Button>
       </div>
     </form>
   );
 }
 
-// --- tips ------------------------------------------------------------------
+// --- tips (a quote list, not a card stack) ----------------------------------
 
 function Tips({ spotId }: { spotId: string }) {
   const [items, setItems] = useState<TipItem[]>([]);
@@ -284,55 +315,57 @@ function Tips({ spotId }: { spotId: string }) {
   };
 
   return (
-    <div className={card}>
+    <div className="border-t border-line pt-6">
       <div className="flex items-center justify-between">
         <h3 className="text-title font-semibold text-navy">Local Tips</h3>
         {!open && (
-          <button type="button" className={ghostBtn} onClick={() => setOpen(true)}>
+          <Button variant="ghost" onClick={() => setOpen(true)}>
             Kommentar verfassen
-          </button>
+          </Button>
         )}
       </div>
 
-      <ul className="mt-3 space-y-2">
-        {items.length === 0 ? (
-          <li className="text-label text-muted">Noch keine Tipps.</li>
-        ) : (
-          items.map((t) => (
-            <li key={t.id} className="rounded-xl bg-cream p-3">
-              <p className="text-ui text-navy/90">{t.body}</p>
-              <p className="mt-1 text-caption text-muted">— {t.author_name}</p>
+      {items.length === 0 ? (
+        <p className="mt-4 text-label text-muted">Noch keine Tipps.</p>
+      ) : (
+        <ul className="mt-6 space-y-6">
+          {items.map((t) => (
+            <li key={t.id} className="border-l-2 border-brand-teal/30 pl-6">
+              <QuoteIcon width={16} height={16} className="text-brand-teal/40" />
+              <p className="mt-2 text-caption uppercase tracking-[0.14em] text-muted">
+                {t.author_name}
+              </p>
+              <p className="mt-1 text-body leading-relaxed text-navy/80">{t.body}</p>
             </li>
-          ))
-        )}
-      </ul>
+          ))}
+        </ul>
+      )}
 
       {open && (
-        <form onSubmit={submit} className="mt-4 rounded-xl bg-navy/5 p-4">
-          <textarea
+        <form onSubmit={submit} className="mt-4 rounded-3xl bg-navy/5 p-4">
+          <Textarea
             required
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="Dein Tipp für diesen Spot"
-            className={input}
             rows={2}
           />
-          <input
+          <Input
             value={author}
             onChange={(e) => setAuthor(e.target.value)}
             placeholder="Vorname oder Vor- und Nachname (Pflichtfeld)"
-            className={`mt-2 ${input}`}
+            className="mt-2"
             required
           />
           <Honeypot value={website} onChange={setWebsite} />
           {error && <p role="alert" className="mt-2 text-label text-red-600">{error}</p>}
           <div className="mt-3 flex gap-2">
-            <button type="submit" disabled={busy || !body.trim()} className={primaryBtn}>
+            <Button type="submit" disabled={busy || !body.trim()}>
               {busy ? "Senden…" : "Tipp teilen"}
-            </button>
-            <button type="button" onClick={() => setOpen(false)} className={ghostBtn}>
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Abbrechen
-            </button>
+            </Button>
           </div>
         </form>
       )}
@@ -340,9 +373,12 @@ function Tips({ spotId }: { spotId: string }) {
   );
 }
 
-// --- gallery + upload + report ---------------------------------------------
+// --- gallery + upload + report ----------------------------------------------
 
-function Gallery({ spotId }: { spotId: string }) {
+/** The photo gallery — a separate export so the page can run it full-bleed
+ *  in its own `SectionBand width="bleed"`, ahead of ratings/tips (Sprint 5:
+ *  the product is image-led, so the gallery leads the community section). */
+export function CommunityGallery({ spotId }: { spotId: string }) {
   const [items, setItems] = useState<CommunityImage[]>([]);
   const [reportFor, setReportFor] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -355,8 +391,8 @@ function Gallery({ spotId }: { spotId: string }) {
   }, [spotId]);
 
   return (
-    <div className={card}>
-      <div className="flex items-center justify-between">
+    <div>
+      <div className={`flex items-center justify-between pr-4 ${INSET}`}>
         <h3 className="text-title font-semibold text-navy">Bildergalerie</h3>
         {!open && (
           <button
@@ -372,26 +408,31 @@ function Gallery({ spotId }: { spotId: string }) {
       </div>
 
       {items.length === 0 ? (
-        <p className="mt-3 text-label text-muted">Noch keine Bilder.</p>
+        <p className={`mt-3 text-label text-muted ${INSET}`}>Noch keine Bilder.</p>
       ) : (
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className={`mt-4 flex snap-x-mandatory gap-4 overflow-x-auto no-scrollbar pb-2 pr-4 ${INSET}`}>
           {items.map((img) => (
-            <figure key={img.id} className="group relative overflow-hidden rounded-xl">
+            <figure
+              key={img.id}
+              className="group relative aspect-[3/4] w-[260px] shrink-0 snap-start overflow-hidden rounded-3xl"
+            >
               <img
                 src={resolveMediaUrl(img.url)}
                 alt={img.credit ?? ""}
-                className="aspect-[4/3] w-full object-cover"
+                className="h-full w-full object-cover"
                 loading="lazy"
               />
               {img.credit && (
-                <figcaption className="absolute inset-x-0 bottom-0 bg-navy/60 px-2 py-1 text-caption text-white">
+                <figcaption className="absolute inset-x-0 bottom-0 bg-navy/60 px-3 py-1.5 text-caption text-white">
                   {img.credit}
                 </figcaption>
               )}
+              {/* Always visible (not hover-only) so it's reachable on touch,
+                  not just with a mouse. */}
               <button
                 type="button"
                 onClick={() => setReportFor(img.id)}
-                className="absolute right-1.5 top-1.5 rounded-full bg-white/85 px-2 py-0.5 text-caption font-medium text-navy opacity-0 transition-opacity group-hover:opacity-100"
+                className="absolute right-2 top-2 rounded-full bg-white/90 px-2.5 py-1 text-caption font-medium text-navy transition-colors hover:bg-white"
               >
                 Melden
               </button>
@@ -401,14 +442,20 @@ function Gallery({ spotId }: { spotId: string }) {
       )}
 
       {reportFor && (
-        <ReportDialog
-          imageId={reportFor}
-          onClose={() => setReportFor(null)}
-          onDone={() => setReportFor(null)}
-        />
+        <div className={INSET}>
+          <ReportDialog
+            imageId={reportFor}
+            onClose={() => setReportFor(null)}
+            onDone={() => setReportFor(null)}
+          />
+        </div>
       )}
 
-      {open && <UploadForm spotId={spotId} onCancel={() => setOpen(false)} onDone={load} />}
+      {open && (
+        <div className={INSET}>
+          <UploadForm spotId={spotId} onCancel={() => setOpen(false)} onDone={load} />
+        </div>
+      )}
     </div>
   );
 }
@@ -443,7 +490,7 @@ function ReportDialog({
   };
 
   return (
-    <div className="mt-4 rounded-xl border border-line bg-cream p-4">
+    <div className="mt-4 rounded-3xl border border-line bg-cream p-4">
       <div className="flex items-center justify-between">
         <p className="text-ui font-medium text-navy">Bild melden</p>
         <button type="button" onClick={onClose} className="text-label text-muted hover:text-navy">
@@ -457,22 +504,22 @@ function ReportDialog({
         </p>
       ) : (
         <>
-          <select value={reason} onChange={(e) => setReason(e.target.value)} className={`mt-2 ${input}`}>
+          <Select value={reason} onChange={(e) => setReason(e.target.value)} className="mt-2">
             {REPORT_REASONS.map((r) => (
               <option key={r.key} value={r.key}>{r.label}</option>
             ))}
-          </select>
-          <textarea
+          </Select>
+          <Textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Anmerkung (optional)"
-            className={`mt-2 ${input}`}
+            className="mt-2"
             rows={2}
           />
           {error && <p role="alert" className="mt-2 text-label text-red-600">{error}</p>}
-          <button type="button" disabled={busy} onClick={submit} className={`mt-3 ${primaryBtn}`}>
+          <Button type="button" disabled={busy} onClick={submit} className="mt-3">
             {busy ? "Senden…" : "Melden"}
-          </button>
+          </Button>
         </>
       )}
     </div>
@@ -545,7 +592,7 @@ function UploadForm({
   };
 
   return (
-    <form onSubmit={submit} className="mt-5 rounded-xl bg-navy/5 p-4">
+    <form onSubmit={submit} className="mt-5 rounded-3xl bg-navy/5 p-4">
       <div className="flex items-center justify-between">
         <p className="text-ui font-medium text-navy">Bild hinzufügen</p>
         <button type="button" onClick={onCancel} className="text-label text-muted hover:text-navy">
@@ -553,17 +600,16 @@ function UploadForm({
         </button>
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
-        <select
+        <Select
           value={kind}
           onChange={(e) => {
             setKind(e.target.value as "gallery" | "hero_candidate");
             setFile(null);
           }}
-          className={input}
         >
           <option value="gallery">Galerie</option>
           <option value="hero_candidate">Titelbild-Kandidat</option>
-        </select>
+        </Select>
         <input
           type="file"
           accept="image/jpeg,image/png,image/webp"
@@ -576,11 +622,11 @@ function UploadForm({
           Titelbild: mind. {HERO_REQ.minWidth}×{HERO_REQ.minHeight} px, Querformat, JPG/PNG/WebP.
         </p>
       )}
-      <input
+      <Input
         value={credit}
         onChange={(e) => setCredit(e.target.value)}
         placeholder="Credit: Name oder Instagram (optional)"
-        className={`mt-2 ${input}`}
+        className="mt-2"
       />
 
       <label className="mt-3 flex items-start gap-2 text-label text-navy">
@@ -607,9 +653,9 @@ function UploadForm({
       <Honeypot value={website} onChange={setWebsite} />
       {error && <p role="alert" className="mt-2 text-label text-red-600">{error}</p>}
       {notice && <p role="status" className="mt-2 text-label text-brand-green">{notice}</p>}
-      <button type="submit" disabled={busy || !file || !accepted} className={`mt-3 ${primaryBtn}`}>
+      <Button type="submit" disabled={busy || !file || !accepted} className="mt-3">
         {busy ? "Hochladen…" : "Hochladen"}
-      </button>
+      </Button>
     </form>
   );
 }

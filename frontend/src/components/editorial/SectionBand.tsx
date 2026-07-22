@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 
 type Tone = "white" | "cream" | "navy";
 type Width = "narrow" | "content" | "wide" | "bleed";
@@ -26,9 +27,16 @@ const TONE_BG: Record<Tone, string> = {
  * A full-bleed editorial section. `tone` alternates the page rhythm
  * (white / cream / navy — navy is reserved for the one dramatic beat per page);
  * `width` sets the reading measure (narrow/content/wide/bleed); vertical
- * padding is fluid. Purely a layout wrapper — no visibility-gating reveal
- * animation, so content is always present (safe in headless renders and on
- * hidden tabs). Motion lives in the specific pieces that need it.
+ * padding is fluid.
+ *
+ * Every section fades/slides in once scrolled into view (Sprint 5: one
+ * motion rule for the whole page, applied here instead of per-piece so
+ * nothing needs its own stagger). This supersedes an earlier "no
+ * visibility-gating reveal" stance — the concern was content disappearing in
+ * headless renders / hidden tabs, but `whileInView` + `viewport={{ once:
+ * true }}` never removes content from the DOM, it only animates opacity/
+ * position on a class toggle, so that risk doesn't apply. `useReducedMotion`
+ * disables it via `initial={false}`.
  */
 export default function SectionBand({
   id,
@@ -60,9 +68,17 @@ export default function SectionBand({
   const isBleed = width === "bleed";
   const isNavy = tone === "navy";
   const hasHeader = Boolean(kicker || heading || intro);
+  const reduce = useReducedMotion();
 
   return (
-    <section id={id} className={`${id ? "scroll-mt-24" : ""} ${TONE_BG[tone]}`}>
+    <motion.section
+      id={id}
+      initial={reduce ? false : { opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.15 }}
+      transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+      className={`${id ? "scroll-mt-24" : ""} ${TONE_BG[tone]}`}
+    >
       <div
         className={`mx-auto ${WIDTH_MAX[width]} ${
           isBleed ? "px-0" : "px-4 sm:px-8"
@@ -101,6 +117,6 @@ export default function SectionBand({
         )}
         {hasHeader && children != null ? <div className="mt-8">{children}</div> : children}
       </div>
-    </section>
+    </motion.section>
   );
 }

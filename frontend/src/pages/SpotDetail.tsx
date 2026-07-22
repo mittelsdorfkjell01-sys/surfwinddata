@@ -6,7 +6,7 @@ import SpotSubnav from "../components/SpotSubnav";
 import Forecast from "../components/Forecast";
 import WindMonths from "../components/WindMonths";
 import SimilarSpots from "../components/SimilarSpots";
-import SpotCommunity from "../components/SpotCommunity";
+import SpotCommunity, { CommunityGallery } from "../components/SpotCommunity";
 import Footer from "../components/Footer";
 import {
   EditorialHero,
@@ -223,22 +223,31 @@ export default function SpotDetail() {
           </SectionBand>
         )}
 
-        {/* Community */}
+        {/* 04 — Community: gallery leads (full-bleed), ratings + tips follow */}
         {id && (
-          <SectionBand
-            id="community"
-            tone="cream"
-            heading="Community"
-            intro="Erfahrungen, Tipps und Bilder von anderen vor Ort. Bitte fair und sachlich bleiben."
-          >
-            <SpotCommunity spotId={id} />
-          </SectionBand>
+          <>
+            <SectionBand
+              id="community"
+              tone="cream"
+              kicker="04 — Community"
+              heading="Community"
+              intro="Erfahrungen, Tipps und Bilder von anderen vor Ort. Bitte fair und sachlich bleiben."
+            />
+            <SectionBand tone="cream" width="bleed" pad="md">
+              <CommunityGallery spotId={id} />
+            </SectionBand>
+            <SectionBand tone="cream" pad="md">
+              <SpotCommunity spotId={id} />
+            </SectionBand>
+          </>
         )}
 
-        {/* Ähnliche Spots */}
+        {/* 05 — Ähnliche Spots */}
         <SectionBand
           id="aehnliche"
           tone="white"
+          width="wide"
+          kicker="05 — In der Nähe"
           heading="Ähnliche Spots"
           intro="Vergleichbare Reviere nach Charakter und Windstärke"
         >

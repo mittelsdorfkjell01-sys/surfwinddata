@@ -28,9 +28,9 @@ export default function SimilarSpots({ spot, limit = 4 }: { spot: Spot; limit?: 
   if (ranked.length === 0) return null;
 
   return (
-    <div className="grid grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-4">
+    <div className="grid grid-cols-2 gap-x-7 gap-y-10 md:grid-cols-4">
       {ranked.map((s) => (
-        <SpotCard key={s.id} spot={s} />
+        <SpotCard key={s.id} spot={s} variant="editorial" />
       ))}
     </div>
   );
