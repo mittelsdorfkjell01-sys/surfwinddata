@@ -20,8 +20,9 @@ function DirArrow({ dir }: { dir: number }) {
   );
 }
 
-/** 7-day wind & wave forecast strip. Wind unit cycles Knoten → m/s → km/h;
- *  wave height is always in metres. */
+/** 7-day wind & wave forecast strip. Headless: the section heading lives in
+ *  the caller's `SectionBand`. Wind unit cycles Knoten → m/s → km/h; wave
+ *  height is always in metres. */
 export default function Forecast({ days }: { days: ForecastDay[] }) {
   const [wu, setWu] = useState<WindUnit>("kts");
 
@@ -32,18 +33,14 @@ export default function Forecast({ days }: { days: ForecastDay[] }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="mb-5 flex items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-[15px] font-semibold text-navy">
-          <span className="text-[18px]">💨</span> Wind &amp; Welle — 7 Tage
-        </h3>
-
+      <div className="mb-4 flex justify-end">
         <button
           type="button"
           onClick={() => setWu((u) => WIND_ORDER[(WIND_ORDER.indexOf(u) + 1) % WIND_ORDER.length])}
-          className="inline-flex items-center gap-1.5 text-[12px] font-medium text-navy transition-colors hover:text-navy/60"
+          className="inline-flex items-center gap-1.5 text-caption font-medium text-navy transition-colors hover:text-navy/60"
         >
           {WIND_LABEL[wu]}
-          <ChevronDownIcon className="text-[14px] text-muted" />
+          <ChevronDownIcon width={14} height={14} className="text-muted" />
         </button>
       </div>
 
@@ -75,8 +72,8 @@ export default function Forecast({ days }: { days: ForecastDay[] }) {
         className="grid min-h-[240px] flex-1 grid-cols-4 gap-2 sm:grid-cols-7"
       >
         {days.map((d) => (
-          <div key={d.day} className="flex flex-col items-center justify-between rounded-xl bg-navy/10 px-1 py-3">
-            <span className="text-[11px] font-semibold tracking-wide text-muted">{d.day}</span>
+          <div key={d.day} className="flex flex-col items-center justify-between rounded-lg bg-navy/10 px-1 py-4">
+            <span className="text-caption font-semibold tracking-wide text-muted">{d.day}</span>
 
             <div className="flex items-baseline gap-1">
               {/* Shape (filled dot vs. hollow ring) carries the meaning, not just
@@ -88,8 +85,8 @@ export default function Forecast({ days }: { days: ForecastDay[] }) {
                 }`}
               />
               {d.good && <span className="sr-only">gute Bedingungen</span>}
-              <span className="text-[15px] font-semibold text-navy">{wind(d.wind)}</span>
-              <span className="text-[10px] font-medium text-navy/60">{windUnit}</span>
+              <span className="text-body font-semibold text-navy">{wind(d.wind)}</span>
+              <span className="text-caption font-medium text-navy/60">{windUnit}</span>
             </div>
 
             <DirArrow dir={d.windDir} />
@@ -98,8 +95,8 @@ export default function Forecast({ days }: { days: ForecastDay[] }) {
               <svg width="18" height="12" viewBox="0 0 24 16" className="text-[#2F6FB0]">
                 <path d="M0 10c3 0 3-5 6-5s3 5 6 5 3-5 6-5 3 5 6 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
-              <span className="mt-1 text-[12px] font-medium text-navy">
-                {wave(d.wave)} <span className="text-[10px] text-muted">{waveUnit}</span>
+              <span className="mt-1 text-caption font-medium text-navy">
+                {wave(d.wave)} <span className="text-caption text-muted">{waveUnit}</span>
               </span>
             </div>
           </div>

@@ -18,11 +18,11 @@ function Stat({
       <div className="text-caption text-muted">{label}</div>
       <div className="mt-1 flex items-baseline gap-1">
         <span
-          className={`${big ? "text-display-2" : "text-[26px]"} font-semibold leading-none text-navy`}
+          className={`${big ? "text-display-2" : "text-title"} font-semibold leading-none text-navy`}
         >
           {value}
         </span>
-        {unit && <span className="text-[14px] font-medium text-muted">{unit}</span>}
+        {unit && <span className="text-ui font-medium text-muted">{unit}</span>}
       </div>
     </div>
   );
@@ -36,7 +36,7 @@ function Stat({
 export default function ConditionsBand({ live }: { live: LiveConditionsRead | null }) {
   if (!live) {
     return (
-      <p className="text-[15px] text-muted">Live-Bedingungen momentan nicht verfügbar.</p>
+      <p className="text-body text-muted">Live-Bedingungen momentan nicht verfügbar.</p>
     );
   }
   const c = live.current;
@@ -47,7 +47,7 @@ export default function ConditionsBand({ live }: { live: LiveConditionsRead | nu
 
   return (
     <div>
-      <div className="mb-7 flex items-center gap-2">
+      <div className="mb-8 flex items-center gap-2">
         <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-dot" />
         <span className="text-caption font-medium uppercase tracking-[0.14em] text-navy/55">
           Bedingungen jetzt

@@ -6,7 +6,8 @@ import { useSpots } from "../lib/hooks";
  * "Ähnliche Spots" — spots that resemble the current one, drawn from the live
  * catalogue (no mock data / picsum). Placeholder ranking: same region first,
  * then closest wind strength; the real similarity ranking comes from the backend
- * similarity endpoints in a later step. Reuses the landing SpotCard.
+ * similarity endpoints in a later step. Reuses the landing SpotCard. Headless:
+ * the section heading lives in the caller's `SectionBand`.
  */
 export default function SimilarSpots({ spot, limit = 4 }: { spot: Spot; limit?: number }) {
   const { data: all } = useSpots({ status: "published" });
@@ -27,19 +28,10 @@ export default function SimilarSpots({ spot, limit = 4 }: { spot: Spot; limit?: 
   if (ranked.length === 0) return null;
 
   return (
-    <section>
-      <div className="mb-6 border-b border-line/70 pb-4">
-        <h2 className="text-[20px] font-semibold text-navy sm:text-[24px]">Ähnliche Spots</h2>
-        <p className="mt-1 text-[14px] text-muted">
-          Vergleichbare Reviere nach Charakter und Windstärke
-        </p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-x-6 gap-y-9 md:grid-cols-4">
-        {ranked.map((s) => (
-          <SpotCard key={s.id} spot={s} />
-        ))}
-      </div>
-    </section>
+    <div className="grid grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-4">
+      {ranked.map((s) => (
+        <SpotCard key={s.id} spot={s} />
+      ))}
+    </div>
   );
 }

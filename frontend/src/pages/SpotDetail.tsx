@@ -58,7 +58,7 @@ export default function SpotDetail() {
               <ErrorBanner message={error} onRetry={reload} />
             </div>
           )}
-          <Link to="/" className="mt-4 inline-block text-[15px] text-navy underline">
+          <Link to="/" className="mt-4 inline-block text-body text-navy underline">
             Zurück zur Übersicht
           </Link>
         </div>
@@ -115,16 +115,16 @@ export default function SpotDetail() {
             type="button"
             onClick={goBack}
             aria-label="Zurück"
-            className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-white/95 py-2 pl-2.5 pr-4 text-[14px] font-medium text-brand-teal shadow-pill backdrop-blur transition-colors hover:bg-white"
+            className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-white/95 py-2 pl-2.5 pr-4 text-ui font-medium text-brand-teal shadow-pill backdrop-blur transition-colors hover:bg-white"
           >
-            <ChevronDownIcon className="rotate-90 text-[18px]" />
+            <ChevronDownIcon width={18} height={18} className="rotate-90" />
             Zurück
           </button>
         </EditorialHero>
 
         {/* Breadcrumb */}
         <div className="mx-auto max-w-[1180px] px-4 pt-6 sm:px-8">
-          <nav className="text-[13px] font-medium text-navy/60">
+          <nav className="text-label font-medium text-navy/60">
             {breadcrumb.map((crumb, i) => (
               <span key={crumb.label + i}>
                 {i > 0 && <span className="mx-1.5 text-muted">›</span>}
@@ -159,7 +159,7 @@ export default function SpotDetail() {
 
         {/* Signature: the animated wind & wave flow map */}
         <SectionBand tone="white" heading="Wind & Wellen an diesem Spot">
-          <div className="rounded-2xl shadow-card">
+          <div className="rounded-3xl shadow-card">
             <SpotFlowMap
               coords={coords}
               windDir={windDir}
@@ -172,7 +172,7 @@ export default function SpotDetail() {
               mapCenter={spot.mapView?.center}
             />
           </div>
-          <p className="mt-3 text-caption text-muted">
+          <p className="mt-4 text-caption text-muted">
             Windstreifen ziehen mit dem Wind, Wellenlinien laufen auf die Küste zu —
             live aus den aktuellen Bedingungen.
           </p>
@@ -181,7 +181,7 @@ export default function SpotDetail() {
         {/* Timing: 7-day forecast + yearly wind rhythm */}
         {(forecastLoading || forecastDays?.length || months) && (
           <SectionBand tone="cream" heading="Wann läuft's?">
-            {forecastLoading && <div className="h-56 animate-pulse rounded-2xl bg-line" />}
+            {forecastLoading && <div className="h-56 animate-pulse rounded-3xl bg-line" />}
             {!forecastLoading && forecastDays && forecastDays.length > 0 && (
               <Forecast days={forecastDays} />
             )}
@@ -204,20 +204,28 @@ export default function SpotDetail() {
 
         {/* Vor Ort */}
         {facilities.length > 0 && (
-          <SectionBand tone="white">
+          <SectionBand tone="white" heading="Facilities">
             <Facilities items={facilities} />
           </SectionBand>
         )}
 
         {/* Community */}
         {id && (
-          <SectionBand tone="cream">
+          <SectionBand
+            tone="cream"
+            heading="Community"
+            intro="Erfahrungen, Tipps und Bilder von anderen vor Ort. Bitte fair und sachlich bleiben."
+          >
             <SpotCommunity spotId={id} />
           </SectionBand>
         )}
 
         {/* Ähnliche Spots */}
-        <SectionBand tone="white">
+        <SectionBand
+          tone="white"
+          heading="Ähnliche Spots"
+          intro="Vergleichbare Reviere nach Charakter und Windstärke"
+        >
           <SimilarSpots spot={spot} />
         </SectionBand>
       </main>

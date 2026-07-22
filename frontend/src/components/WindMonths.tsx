@@ -4,16 +4,16 @@ import type { MonthWind } from "../lib/types";
  * Yearly wind climatology. Each month is a cluster of thin weekly bars, so you
  * can read both the seasonal trend and the week-to-week spread at a glance. Bar
  * height maps to the average hours of *rideable* wind (≥ 14 kt) per week; the
- * windiest week sets the top of scale.
+ * windiest week sets the top of scale. Headless: the section heading lives in
+ * the caller's `SectionBand`.
  */
 export default function WindMonths({ data }: { data: MonthWind[] }) {
   const max = Math.max(...data.flatMap((m) => m.weeks));
 
   return (
     <div>
-      <div className="mb-1 flex items-baseline justify-between">
-        <h3 className="text-[15px] font-semibold text-navy">Windmonate</h3>
-        <span className="text-[12px] text-muted">Fahrbarer Wind pro Woche · Std ≥ 14 kt</span>
+      <div className="mb-1 flex justify-end">
+        <span className="text-caption text-muted">Fahrbarer Wind pro Woche · Std ≥ 14 kt</span>
       </div>
 
       {/* Screen-reader alternative to the bar chart (WCAG 1.1.1). */}
@@ -35,7 +35,7 @@ export default function WindMonths({ data }: { data: MonthWind[] }) {
         </tbody>
       </table>
 
-      <div aria-hidden="true" className="mt-5 flex items-end gap-2 sm:gap-3">
+      <div aria-hidden="true" className="mt-6 flex items-end gap-2 sm:gap-4">
         {data.map((m) => {
           const monthMean = m.weeks.reduce((a, b) => a + b, 0) / m.weeks.length;
           const strong = monthMean >= max * 0.72;
@@ -55,13 +55,13 @@ export default function WindMonths({ data }: { data: MonthWind[] }) {
                   />
                 ))}
               </div>
-              <span className="text-[10.5px] font-medium tracking-wide text-muted">{m.month}</span>
+              <span className="text-caption font-medium tracking-wide text-muted">{m.month}</span>
             </div>
           );
         })}
       </div>
 
-      <div className="mt-5 flex items-center gap-4 text-[11.5px] text-muted">
+      <div className="mt-6 flex items-center gap-4 text-caption text-muted">
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-2.5 w-2 rounded-sm bg-navy" /> Starke Monate
         </span>

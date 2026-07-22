@@ -75,14 +75,14 @@ export default function EditorialHero({
       <div className="absolute inset-x-0 bottom-0 z-10">
         <div className="mx-auto max-w-[1180px] px-4 pb-10 sm:px-8 sm:pb-14">
           {kicker && (
-            <div className="mb-3 text-[13px] font-semibold uppercase tracking-[0.16em] text-white/85">
+            <div className="mb-3 text-label font-semibold uppercase tracking-[0.16em] text-white/85">
               {kicker}
             </div>
           )}
           <h1 className="text-display-1 font-bold text-white text-balance drop-shadow-[0_2px_14px_rgba(0,0,0,0.4)]">
             {title}
           </h1>
-          {meta && <div className="mt-3 text-[15px] font-medium text-white/90">{meta}</div>}
+          {meta && <div className="mt-3 text-body font-medium text-white/90">{meta}</div>}
         </div>
       </div>
     </section>

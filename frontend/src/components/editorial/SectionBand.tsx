@@ -1,34 +1,99 @@
 import type { ReactNode } from "react";
 
+type Tone = "white" | "cream" | "navy";
+type Width = "narrow" | "content" | "wide" | "bleed";
+type Pad = "md" | "lg";
+
+const WIDTH_MAX: Record<Width, string> = {
+  narrow: "max-w-[720px]",
+  content: "max-w-[1180px]",
+  wide: "max-w-[1440px]",
+  bleed: "max-w-none",
+};
+
+const PAD_Y: Record<Pad, string> = {
+  lg: "py-[clamp(4rem,9vw,8rem)]",
+  md: "py-[clamp(2.5rem,5vw,4rem)]",
+};
+
+const TONE_BG: Record<Tone, string> = {
+  white: "bg-white",
+  cream: "bg-cream",
+  navy: "bg-navy text-white",
+};
+
 /**
- * A full-bleed editorial section. `tone` alternates the page rhythm (white /
- * cream); vertical padding is fluid. Purely a layout wrapper — no visibility-
- * gating reveal animation, so content is always present (safe in headless
- * renders and on hidden tabs). Motion lives in the specific pieces that need it.
+ * A full-bleed editorial section. `tone` alternates the page rhythm
+ * (white / cream / navy — navy is reserved for the one dramatic beat per page);
+ * `width` sets the reading measure (narrow/content/wide/bleed); vertical
+ * padding is fluid. Purely a layout wrapper — no visibility-gating reveal
+ * animation, so content is always present (safe in headless renders and on
+ * hidden tabs). Motion lives in the specific pieces that need it.
  */
 export default function SectionBand({
   tone = "white",
+  width = "content",
+  pad = "lg",
+  align = "left",
+  kicker,
   heading,
   intro,
   className = "",
   children,
 }: {
-  tone?: "white" | "cream";
+  tone?: Tone;
+  width?: Width;
+  pad?: Pad;
+  align?: "left" | "center";
+  kicker?: string;
   heading?: string;
   intro?: string;
   className?: string;
   children: ReactNode;
 }) {
+  const isBleed = width === "bleed";
+  const isNavy = tone === "navy";
+  const hasHeader = Boolean(kicker || heading || intro);
+
   return (
-    <section className={tone === "cream" ? "bg-cream" : "bg-white"}>
+    <section className={TONE_BG[tone]}>
       <div
-        className={`mx-auto max-w-[1180px] px-4 py-[clamp(2.5rem,6vw,5.5rem)] sm:px-8 ${className}`}
+        className={`mx-auto ${WIDTH_MAX[width]} ${
+          isBleed ? "px-0" : "px-4 sm:px-8"
+        } ${PAD_Y[pad]} ${className}`}
       >
-        {heading && (
-          <h2 className="text-display-2 font-semibold text-navy text-balance">{heading}</h2>
+        {hasHeader && (
+          <div className={align === "center" ? "text-center" : ""}>
+            {kicker && (
+              <p
+                className={`text-caption font-medium uppercase tracking-[0.18em] ${
+                  isNavy ? "text-white/60" : "text-brand-teal"
+                }`}
+              >
+                {kicker}
+              </p>
+            )}
+            {heading && (
+              <h2
+                className={`text-display-2 font-semibold text-balance ${
+                  kicker ? "mt-2" : ""
+                } ${isNavy ? "text-white" : "text-navy"}`}
+              >
+                {heading}
+              </h2>
+            )}
+            {intro && (
+              <p
+                className={`mt-4 max-w-[60ch] text-body ${
+                  align === "center" ? "mx-auto" : ""
+                } ${isNavy ? "text-white/70" : "text-navy/70"}`}
+              >
+                {intro}
+              </p>
+            )}
+          </div>
         )}
-        {intro && <p className="mt-3 max-w-[60ch] text-[15px] text-navy/70">{intro}</p>}
-        {heading || intro ? <div className="mt-8">{children}</div> : children}
+        {hasHeader ? <div className="mt-8">{children}</div> : children}
       </div>
     </section>
   );

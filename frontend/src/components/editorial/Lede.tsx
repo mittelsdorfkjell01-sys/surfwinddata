@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
  */
 export default function Lede({ children }: { children?: ReactNode }) {
   return (
-    <div className="max-w-[68ch] text-[17px] leading-relaxed text-navy/80 text-pretty">
+    <div className="max-w-[68ch] text-lede leading-relaxed text-navy/80 text-pretty">
       {children ? (
         children
       ) : (
