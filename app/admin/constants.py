@@ -116,8 +116,10 @@ def validate_facilities(value: dict | None) -> dict | None:
     """Validate the ``facilities`` JSONB blob.
 
     Structure is ``{kind: {"available": bool, "note"?: str}}``. Only the five
-    known kinds are allowed; a *missing* kind means "unknown" (the frontend hides
-    those rows), so we never inject defaults. ``None``/empty stays ``None``.
+    known kinds are allowed; a *missing* kind means "unknown" (shown as its own
+    dimmed, non-strikethrough state on the spot page — distinct from
+    ``available: false``, which is a demonstrable "not here"), so we never
+    inject defaults. ``None``/empty stays ``None``.
     """
     if value is None:
         return None

@@ -166,7 +166,7 @@ export default function AdminSpotForm() {
     const out: Record<string, { available: boolean; note?: string }> = {};
     for (const k of FACILITY_KINDS) {
       const f = facilities[k];
-      if (f.state === "unknown") continue; // omit → "unknown" (hidden on the spot page)
+      if (f.state === "unknown") continue; // omit the key entirely → shown as "unbekannt" on the spot page
       out[k] = {
         available: f.state === "yes",
         ...(f.note.trim() ? { note: f.note.trim() } : {}),
@@ -494,7 +494,8 @@ export default function AdminSpotForm() {
           <section>
             <h2 className="text-[15px] font-semibold text-navy">Facilities</h2>
             <p className="mt-1 text-[12px] text-muted">
-              „Unbekannt" wird auf der Spot-Seite ausgeblendet.
+              „Unbekannt" zeigt auf der Spot-Seite einen eigenen, gedämpften Zustand — nicht
+              „nicht vorhanden".
             </p>
             <div className="mt-3 space-y-3">
               {FACILITY_KINDS.map((k) => (
@@ -527,19 +528,20 @@ export default function AdminSpotForm() {
                       </Chip>
                     ))}
                   </div>
-                  {facilities[k].state !== "unknown" && (
-                    <input
-                      className={`${inputCls} mt-2 sm:mt-0`}
-                      value={facilities[k].note}
-                      onChange={(e) =>
-                        setFacilities((prev) => ({
-                          ...prev,
-                          [k]: { ...prev[k], note: e.target.value },
-                        }))
-                      }
-                      placeholder="Notiz (optional)"
-                    />
-                  )}
+                  <input
+                    className={`${inputCls} mt-2 sm:mt-0 disabled:cursor-not-allowed disabled:opacity-50`}
+                    value={facilities[k].note}
+                    disabled={facilities[k].state === "unknown"}
+                    onChange={(e) =>
+                      setFacilities((prev) => ({
+                        ...prev,
+                        [k]: { ...prev[k], note: e.target.value },
+                      }))
+                    }
+                    placeholder={
+                      facilities[k].state === "unknown" ? "Notiz (erst bei ja/nein)" : "Notiz (optional)"
+                    }
+                  />
                 </div>
               ))}
             </div>

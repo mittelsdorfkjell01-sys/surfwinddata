@@ -12,7 +12,8 @@ Data honesty:
 - ``facing`` is intentionally omitted (nullable) where no reliable orientation
   was available — not guessed.
 - ``facilities`` are set only where sources support them. A missing key = unknown
-  = hidden in the frontend. ``available: false`` only on counter-evidence.
+  (shown as its own dimmed state on the spot page, not hidden and never
+  "not available"). ``available: false`` only on counter-evidence.
 - ``editorial.tide`` on wave spots is ``"n/a"`` where no reliable tide info was
   available (readiness accepts the sentinel).
 - ``usable_wind_directions`` are authored as 8-point compass letters and
