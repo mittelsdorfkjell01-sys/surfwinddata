@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { climatologyToMonths, bestSeasonWindow } from "../seasonView";
+import { climatologyToMonths, climatologyToPercentile, bestSeasonWindow } from "../seasonView";
 import type { MonthWind } from "../types";
 
 // Build a 52-week climatology whose rideable-wind hours follow `strongPerWeek`.
@@ -54,6 +54,64 @@ describe("climatologyToMonths — rideable wind hours (≥14 kt)", () => {
     expect(climatologyToMonths({ weeks: [{ week: 1, wind: {} }] })).toBeNull();
     // All-calm histogram (no ≥14 kt hours) → nothing to show.
     expect(climatologyToMonths(makeClim(() => 0))).toBeNull();
+  });
+});
+
+// All hours concentrated in one speed bin — bins are [0-6, 6-10, 10-14, 14-18,
+// 18-25, 25+ kt) — so the percentile must land inside that bin, letting the
+// exact interpolated value be predicted by hand.
+function makeClimAllInBin(binIndex: number, hours: number, window = "2006-2025") {
+  const weeks = Array.from({ length: 52 }, (_, i) => {
+    const row = [0, 0, 0, 0, 0, 0];
+    row[binIndex] = hours;
+    return { week: i + 1, wind: { joint: [row] } };
+  });
+  return { window, weeks };
+}
+
+describe("climatologyToPercentile — P{p} wind speed per week", () => {
+  it("interpolates within a single dominant bin (known histogram)", () => {
+    // Bin 3 = [14, 18) kt. All hours here → P75 = 14 + 0.75 * (18-14) = 17.
+    const months = climatologyToPercentile(makeClimAllInBin(3, 100), 75)!;
+    expect(months).not.toBeNull();
+    expect(months[0].weeks[0]).toBeCloseTo(17, 5);
+  });
+
+  it("lands on the bin midpoint at the median when all hours are in one bin", () => {
+    // Bin 2 = [10, 14) kt. P50 = 10 + 0.5 * (14-10) = 12.
+    const months = climatologyToPercentile(makeClimAllInBin(2, 100), 50)!;
+    expect(months[0].weeks[0]).toBeCloseTo(12, 5);
+  });
+
+  it("extrapolates the open-ended top bin using the previous bin's width", () => {
+    // Bin 5 = [25, ∞). Extrapolated width = 25-18 = 7 → treated as [25, 32).
+    const months = climatologyToPercentile(makeClimAllInBin(5, 100), 50)!;
+    expect(months[0].weeks[0]).toBeCloseTo(25 + 0.5 * 7, 5);
+  });
+
+  it("walks the cumulative distribution across bins", () => {
+    // 50h in [6,10), 50h in [10,14) → total 100. P75 target = 75: bin1 covers
+    // 0..50, bin2 covers 50..100, so target sits 25/50 = 50% into bin2.
+    const weeks = Array.from({ length: 52 }, (_, i) => ({
+      week: i + 1,
+      wind: { joint: [[0, 50, 50, 0, 0, 0]] },
+    }));
+    const months = climatologyToPercentile({ window: "2006-2025", weeks }, 75)!;
+    expect(months[0].weeks[0]).toBeCloseTo(12, 5); // 10 + 0.5 * (14-10)
+  });
+
+  it("hides (null) when there is no usable histogram", () => {
+    expect(climatologyToPercentile(null, 75)).toBeNull();
+    expect(climatologyToPercentile({ weeks: [] }, 75)).toBeNull();
+    expect(climatologyToPercentile({ weeks: [{ week: 1, wind: {} }] }, 75)).toBeNull();
+  });
+
+  it("hides (null) when the histogram has zero hours everywhere", () => {
+    const weeks = Array.from({ length: 52 }, (_, i) => ({
+      week: i + 1,
+      wind: { joint: [[0, 0, 0, 0, 0, 0]] },
+    }));
+    expect(climatologyToPercentile({ window: "2006-2025", weeks }, 75)).toBeNull();
   });
 });
 

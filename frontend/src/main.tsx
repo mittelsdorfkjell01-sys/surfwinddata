@@ -41,6 +41,7 @@ async function bootstrap() {
     { path: "/map", element: <MapView /> },
     { path: "/search", element: <SearchResults /> },
     { path: "/spot/:id", element: <SpotDetail /> },
+    { path: "/spot/:id/daten", element: <SpotDetail /> },
     { path: "/region/:slug", element: <RegionDetail /> },
     { path: "/impressum", element: <Impressum /> },
     { path: "/datenschutz", element: <Datenschutz /> },

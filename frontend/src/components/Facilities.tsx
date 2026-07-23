@@ -10,11 +10,13 @@ const facilityIcon: Record<FacilityKind, (p: { width?: number; height?: number; 
 };
 
 /** "Facilities" panel — icon + title + one-line note per amenity. Headless:
- *  the section heading lives in the caller's `SectionBand`. Only known
- *  facilities are passed in (unknown ones are hidden upstream);
- *  demonstrably-absent ones (available === false) mute the icon only — the
- *  note text itself already says "Nicht vorhanden", so a struck-through
- *  title would just be a second, redundant "disabled" signal.
+ *  the section heading lives in the caller's `SectionBand`. All five kinds
+ *  always render (never hidden), in three visually distinct states, because
+ *  "not present" and "nobody checked" are different claims and the page must
+ *  never conflate them:
+ *   - available: true  → icon full, normal title/note
+ *   - available: false → icon muted + title struck through (demonstrably absent)
+ *   - available: null  → icon at 30% opacity, no strikethrough, "Keine Angabe"
  *
  *  `variant="grid"` (default) is the icon-tile grid; `variant="rail"` is the
  *  hairline-table look for the sticky spec rail next to the lede.
@@ -38,11 +40,18 @@ export default function Facilities({
           {items.map((f) => {
             const Icon = facilityIcon[f.kind];
             const absent = f.available === false;
+            const unknown = f.available === null;
             return (
               <div key={f.kind} className="flex items-center justify-between gap-6 py-4">
                 <dt className="flex items-center gap-3">
-                  <Icon width={18} height={18} className={`text-navy/70 ${absent ? "opacity-40" : ""}`} />
-                  <span className="text-body font-medium text-navy">{f.title}</span>
+                  <Icon
+                    width={18}
+                    height={18}
+                    className={`text-navy/70 ${absent ? "opacity-40" : unknown ? "opacity-30" : ""}`}
+                  />
+                  <span className={`text-body font-medium ${absent ? "text-muted line-through" : "text-navy"}`}>
+                    {f.title}
+                  </span>
                 </dt>
                 <dd className="text-caption text-muted">{f.note}</dd>
               </div>
@@ -58,16 +67,19 @@ export default function Facilities({
       {items.map((f) => {
         const Icon = facilityIcon[f.kind];
         const absent = f.available === false;
+        const unknown = f.available === null;
         return (
           <div key={f.kind}>
             <span
               className={`grid h-11 w-11 place-items-center rounded-full bg-navy/[0.04] text-navy ${
-                absent ? "opacity-40" : ""
+                absent ? "opacity-40" : unknown ? "opacity-30" : ""
               }`}
             >
               <Icon width={22} height={22} />
             </span>
-            <p className="mt-3 text-ui font-medium leading-tight text-navy">{f.title}</p>
+            <p className={`mt-3 text-ui font-medium leading-tight ${absent ? "text-muted line-through" : "text-navy"}`}>
+              {f.title}
+            </p>
             <p className="mt-0.5 text-caption leading-snug text-muted">{f.note}</p>
           </div>
         );

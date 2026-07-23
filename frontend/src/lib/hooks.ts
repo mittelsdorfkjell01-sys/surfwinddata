@@ -4,7 +4,7 @@
 // cache (see ./swr): navigating between pages renders cached data instantly and
 // refreshes in the background instead of re-showing a skeleton and re-fetching.
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import type { Spot } from "./types";
 import * as api from "./api";
 import { adaptSpot, adaptSpots } from "./adapt";
@@ -121,4 +121,32 @@ export function useBestWeeks(regionId?: string): AsyncStateReloadable<api.BestWe
 /** All regions (raw backend records), cached once and shared app-wide. */
 export function useRegions(): AsyncStateReloadable<api.Region[]> {
   return useSwr("regions", () => api.getRegions());
+}
+
+/** A piece of UI state persisted to localStorage under `key` (spot-agnostic —
+ *  e.g. a chart's unit/metric toggle that should stay put across spots and
+ *  reloads). Falls back to `initial` when nothing's stored yet, or storage
+ *  isn't available (private browsing, quota). */
+export function usePersistedState<T>(
+  key: string,
+  initial: T
+): [T, Dispatch<SetStateAction<T>>] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw !== null ? (JSON.parse(raw) as T) : initial;
+    } catch {
+      return initial;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      /* private browsing / quota — the toggle still works for this session */
+    }
+  }, [key, value]);
+
+  return [value, setValue];
 }

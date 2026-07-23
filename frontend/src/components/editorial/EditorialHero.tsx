@@ -9,8 +9,9 @@ import HeroImage from "../HeroImage";
  *    faint animated wind motif, so a missing image never reads as empty/broken.
  *
  * `children` is a top slot (e.g. a back pill) tucked below the floating header.
- * The `title` renders as the page's single <h1> in Poppins display size (not the
- * wordmark face).
+ * `title`, when given, renders as the page's single <h1> in Poppins display
+ * size (not the wordmark face) — omit it when the <h1> lives elsewhere on the
+ * page (the spot page's SpotIdentityCard owns it instead).
  */
 export default function EditorialHero({
   image,
@@ -26,7 +27,7 @@ export default function EditorialHero({
   focal?: { x: number; y: number } | null;
   alt: string;
   kicker?: ReactNode;
-  title: string;
+  title?: string;
   meta?: ReactNode;
   /** Photographer name / Instagram tag, shown small in the hero's bottom
    *  corner. Plain text only — there's no credit-URL field in the data model
@@ -106,7 +107,7 @@ export default function EditorialHero({
               {kicker}
             </div>
           )}
-          <h1 className="text-display-1 font-bold text-white text-balance">{title}</h1>
+          {title && <h1 className="text-display-1 font-bold text-white text-balance">{title}</h1>}
           {meta && <div className="mt-3 text-body font-medium text-white/90">{meta}</div>}
         </div>
       </motion.div>

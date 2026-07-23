@@ -27,22 +27,20 @@ export function spotFactsFrom(spot: Spot): SpotFact[] {
   return facts;
 }
 
-/** Facilities present in the map, in canonical order. Absent kinds are omitted;
- *  available:false kinds are included but flagged so the UI can mute them. */
+/** All five facility kinds, always, in canonical order — a kind absent from
+ *  the map is "unbekannt" (available: null), not hidden. Hiding it would read
+ *  as "definitely not here" when really nobody has checked yet. */
 export function facilitiesFromMap(map?: FacilityMap | null): Facility[] {
-  if (!map) return [];
-  const out: Facility[] = [];
-  for (const kind of FACILITY_KINDS) {
-    const entry = map[kind];
-    if (!entry) continue; // unknown → hide the row entirely
-    out.push({
+  return FACILITY_KINDS.map((kind) => {
+    const entry = map?.[kind];
+    if (!entry) {
+      return { kind, title: facilityLabel(kind), note: "Keine Angabe", available: null };
+    }
+    return {
       kind,
       title: facilityLabel(kind),
-      note: entry.available
-        ? entry.note ?? "Vorhanden"
-        : entry.note ?? "Nicht vorhanden",
+      note: entry.note ?? (entry.available ? "Vorhanden" : "Nicht vorhanden"),
       available: entry.available,
-    });
-  }
-  return out;
+    };
+  });
 }

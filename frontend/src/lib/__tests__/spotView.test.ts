@@ -13,28 +13,37 @@ const baseSpot = (over: Partial<Spot>): Spot => ({
 });
 
 describe("facilitiesFromMap", () => {
-  it("hides unknown facilities (absent keys)", () => {
+  it("always renders all five kinds, in canonical order", () => {
     const out = facilitiesFromMap({ parking: { available: true } });
-    expect(out.map((f) => f.kind)).toEqual(["parking"]);
+    expect(out.map((f) => f.kind)).toEqual(["parking", "shower", "food", "camping", "school"]);
   });
 
-  it("includes available:false but flags it", () => {
+  it("marks an absent key as unknown (available: null), not hidden", () => {
+    const out = facilitiesFromMap({ parking: { available: true } });
+    const shower = out.find((f) => f.kind === "shower")!;
+    expect(shower.available).toBeNull();
+    expect(shower.note).toBe("Keine Angabe");
+  });
+
+  it("flags available:false as demonstrably absent, distinct from unknown", () => {
     const out = facilitiesFromMap({ shower: { available: false } });
-    expect(out[0]).toMatchObject({ kind: "shower", available: false, note: "Nicht vorhanden" });
+    expect(out.find((f) => f.kind === "shower")).toMatchObject({
+      available: false,
+      note: "Nicht vorhanden",
+    });
   });
 
-  it("keeps notes and canonical order", () => {
-    const out = facilitiesFromMap({
-      camping: { available: true, note: "am Platz" },
-      parking: { available: true },
-    });
-    expect(out.map((f) => f.kind)).toEqual(["parking", "camping"]); // canonical order
+  it("keeps custom notes", () => {
+    const out = facilitiesFromMap({ camping: { available: true, note: "am Platz" } });
     expect(out.find((f) => f.kind === "camping")?.note).toBe("am Platz");
   });
 
-  it("returns [] for null/empty", () => {
-    expect(facilitiesFromMap(null)).toEqual([]);
-    expect(facilitiesFromMap({})).toEqual([]);
+  it("treats null/empty map as all-unknown, never as all-absent", () => {
+    for (const map of [null, {}]) {
+      const out = facilitiesFromMap(map);
+      expect(out).toHaveLength(5);
+      expect(out.every((f) => f.available === null)).toBe(true);
+    }
   });
 });
 

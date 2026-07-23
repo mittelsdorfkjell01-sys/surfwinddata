@@ -1,9 +1,11 @@
-// Public community section on the spot page: a photo gallery, ratings and
-// local tips. Content is shown first; the input forms are collapsed behind a
-// button ("Bewerten" / "Kommentar verfassen" / "+") so the page stays calm
-// and reading-first. Names are required (first name, or first + last).
+// Public community section on the spot page: a single chronological feed —
+// rating/tip/photo posts merged client-side (see lib/communityFeed, since the
+// backend still has three separate endpoints and this sprint adds none) —
+// plus the filmstrip gallery, which draws its photos from that same feed.
+// The composer is always visible (no hidden "Bewerten" button to find first)
+// and posts stars + text + an optional photo in one action.
 
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ApiError,
   getImageLicense,
@@ -11,19 +13,31 @@ import {
   getSpotImages,
   getTips,
   postRating,
-  postTip,
   reportImage,
   resolveMediaUrl,
   uploadSpotImage,
   type CommunityImage,
-  type RatingAggregate,
   type RatingItem,
   type TipItem,
 } from "../lib/api";
 import { HERO_REQ, validateHeroFile } from "./ImageUpload";
 import { LEVELS, levelLabel, sportLabel } from "../lib/labels";
-import { QuoteIcon } from "../lib/icons";
+import { ChevronDownIcon, CloseIcon } from "../lib/icons";
 import { Button, Input, Select, Textarea } from "./ui";
+import { usePersistedState } from "../lib/hooks";
+import { SectionBand } from "./editorial";
+import {
+  avatarColor,
+  encodeVisitDate,
+  feedPhotos,
+  formatVisitDate,
+  initials,
+  mergeFeed,
+  relativeTime,
+  sortFeed,
+  type FeedPost,
+  type FeedSort,
+} from "../lib/communityFeed";
 
 const SPORTS = ["kitesurf", "windsurf", "wing", "surf"];
 const REPORT_REASONS: { key: string; label: string }[] = [
@@ -32,11 +46,6 @@ const REPORT_REASONS: { key: string; label: string }[] = [
   { key: "wrong_spot", label: "Falscher Spot" },
   { key: "other", label: "Sonstiges" },
 ];
-
-// The gallery bleeds full-width but its text/controls stay aligned to the
-// normal 1180px content column — `max(gutter, centered-gutter)` mirrors
-// SectionBand's own centering math without needing the section's padding.
-const INSET = "pl-4 sm:pl-[max(2rem,calc((100vw-1180px)/2))]";
 
 // Name must be a first name, or first + last (1–2 words, letters only).
 const NAME_RE = /^\p{L}[\p{L}'.-]*(?:\s+\p{L}[\p{L}'.-]*)?$/u;
@@ -55,10 +64,7 @@ function StarIcon({ filled }: { filled: boolean }) {
   );
 }
 
-/** Read-only fractional-fill star row (an orange path clipped to the
- *  fractional width, over a line-coloured base) — replaces the old ★ text
- *  glyph, which renders as a colour emoji on some platforms and can't show a
- *  partial star at all. */
+/** Read-only fractional-fill star row. */
 function Stars({ value, size = 16 }: { value: number; size?: number }) {
   const uid = useId();
   return (
@@ -82,380 +88,736 @@ function Stars({ value, size = 16 }: { value: number; size?: number }) {
   );
 }
 
-/** Ratings (5/12) + Tips (7/12) — headless: the section heading lives in the
- *  caller's `SectionBand`. The gallery is a separate export, `CommunityGallery`
- *  below, so the page can run it full-bleed in its own section. */
-export default function SpotCommunity({ spotId }: { spotId: string }) {
-  return (
-    <div className="grid gap-x-16 gap-y-12 lg:grid-cols-12">
-      <div className="lg:col-span-5">
-        <Ratings spotId={spotId} />
-      </div>
-      <div className="lg:col-span-7">
-        <Tips spotId={spotId} />
-      </div>
-    </div>
-  );
-}
+/**
+ * The whole community area: the gallery filmstrip (photos drawn from the
+ * feed, see below) and the feed itself. One shared fetch (ratings/tips/images)
+ * feeds both, in two SectionBands so the page keeps its white→cream rhythm.
+ */
+export default function SpotCommunitySection({ spotId, spotName }: { spotId: string; spotName: string }) {
+  const [ratings, setRatings] = useState<RatingItem[]>([]);
+  const [tips, setTips] = useState<TipItem[]>([]);
+  const [images, setImages] = useState<CommunityImage[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-// --- ratings ---------------------------------------------------------------
-
-function Ratings({ spotId }: { spotId: string }) {
-  const [items, setItems] = useState<RatingItem[]>([]);
-  const [agg, setAgg] = useState<RatingAggregate | null>(null);
-  const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = () =>
-    getRatings(spotId)
-      .then((r) => {
-        setItems(r.items);
-        setAgg(r.aggregate);
-      })
-      .catch(() => setError("Bewertungen konnten nicht geladen werden."));
+  const load = () => {
+    setLoadError(null);
+    void getRatings(spotId)
+      .then((r) => setRatings(r.items))
+      .catch(() => setLoadError("Beiträge konnten nicht vollständig geladen werden."));
+    void getTips(spotId).then((r) => setTips(r.items)).catch(() => {});
+    void getSpotImages(spotId).then((r) => setImages(r.items)).catch(() => {});
+  };
 
   useEffect(() => {
-    void load();
+    load();
   }, [spotId]);
 
+  const posts = useMemo(() => mergeFeed({ ratings, tips, images }), [ratings, tips, images]);
+  const photos = useMemo(() => feedPhotos(posts), [posts]);
+
   return (
-    <div className="border-t border-line pt-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="text-title font-semibold text-navy">Bewertungen</h3>
-          {agg && agg.count > 0 ? (
-            <>
-              <div className="mt-2 flex items-baseline gap-3">
-                <span className="text-stat font-semibold tabular-nums text-navy">
-                  {agg.avg?.toFixed(1)}
-                </span>
-                <Stars value={agg.avg ?? 0} size={18} />
-              </div>
-              <p className="mt-1 text-caption text-muted">{agg.count} Bewertungen</p>
-            </>
-          ) : (
-            <p className="mt-2 text-label text-muted">Noch keine Bewertungen.</p>
-          )}
-        </div>
-        {!open && (
-          <Button variant="ghost" onClick={() => setOpen(true)}>
-            Bewerten
-          </Button>
-        )}
-      </div>
-
-      {error && <p role="alert" className="mt-2 text-label text-red-600">{error}</p>}
-
-      {/* Form opens only on demand */}
-      {open && (
-        <RatingForm
-          spotId={spotId}
-          onCancel={() => setOpen(false)}
-          onDone={() => {
-            setOpen(false);
-            load();
-          }}
-        />
-      )}
-
-      {/* Ratings below */}
-      {items.length > 0 && (
-        <ul className="mt-6 divide-y divide-line">
-          {items.map((r) => (
-            <li key={r.id} className="py-4">
-              <div className="flex items-center justify-between">
-                <Stars value={r.stars} />
-                <span className="text-caption text-muted">
-                  {sportLabel(r.sport)} · {levelLabel(r.skill_level)}
-                </span>
-              </div>
-              <p className="mt-2 text-ui text-navy/90">{r.conditions}</p>
-              <p className="mt-1 text-caption text-muted">— {r.author_name}</p>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <>
+      <SectionBand tone="white" pad="md">
+        <CommunityGalleryFilmstrip spotId={spotId} images={photos} />
+      </SectionBand>
+      <SectionBand
+        tone="cream"
+        kicker="Community"
+        heading="Community"
+        intro="Erfahrungen und Tipps von anderen vor Ort. Bitte fair und sachlich bleiben."
+      >
+        <CommunityFeed spotId={spotId} spotName={spotName} posts={posts} loadError={loadError} onPosted={load} />
+      </SectionBand>
+    </>
   );
 }
 
-function RatingForm({
+// --- composer ----------------------------------------------------------------
+
+/** Always visible, star-first: no "Bewerten" button to reveal it. Picking a
+ *  star expands the rest (text, sport, level, visit date, photo). Submits a
+ *  single rating (stars + free text) and, if a photo was attached, a second
+ *  upload call right after — the closest the current API gets to "one post,
+ *  one action" without a dedicated endpoint. */
+function Composer({
   spotId,
-  onDone,
-  onCancel,
+  spotName,
+  onPosted,
 }: {
   spotId: string;
-  onDone: () => void;
-  onCancel: () => void;
+  spotName: string;
+  onPosted: () => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const [stars, setStars] = useState(0);
-  const [skill, setSkill] = useState("intermediate");
+  const [text, setText] = useState("");
   const [sport, setSport] = useState("kitesurf");
-  const [conditions, setConditions] = useState("");
+  const [skill, setSkill] = useState("intermediate");
+  const [visitedAt, setVisitedAt] = useState("");
   const [author, setAuthor] = useState("");
   const [website, setWebsite] = useState(""); // honeypot
+  const [file, setFile] = useState<File | null>(null);
+  const [accepted, setAccepted] = useState(false);
+  const [terms, setTerms] = useState<{ version: string; terms: string } | null>(null);
+  const [showTerms, setShowTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getImageLicense().then(setTerms).catch(() => {});
+  }, []);
+
+  const pickStar = (n: number) => {
+    setStars(n);
+    setExpanded(true);
+  };
+
+  const reset = () => {
+    setExpanded(false);
+    setStars(0);
+    setText("");
+    setVisitedAt("");
+    setFile(null);
+    setAccepted(false);
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (stars < 1) return setError("Bitte eine Sternebewertung wählen.");
+    if (!text.trim()) return setError("Bitte kurz schreiben, wie es war.");
     if (!validName(author)) return setError("Bitte Vorname (oder Vor- und Nachname) angeben.");
+    if (file && !accepted) return setError("Bitte die Rechteerklärung fürs Foto bestätigen.");
     setError(null);
     setBusy(true);
     try {
+      const conditions = encodeVisitDate(visitedAt, text.trim());
       await postRating(spotId, {
-        stars, skill_level: skill, sport, conditions,
-        author_name: author.trim(), website,
+        stars,
+        skill_level: skill,
+        sport,
+        conditions,
+        author_name: author.trim(),
+        website,
       });
-      onDone();
+      if (file) {
+        await uploadSpotImage(spotId, file, "gallery", { credit: author.trim(), licenseAccept: accepted });
+      }
+      reset();
+      onPosted();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Speichern fehlgeschlagen.");
+      setError(err instanceof ApiError ? err.message : "Senden fehlgeschlagen.");
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <form onSubmit={submit} className="mt-4 rounded-3xl bg-navy/5 p-4">
-      <p className="text-label font-medium text-navy">Deine Bewertung</p>
-      {/* clickable stars */}
-      <div className="mt-2 flex gap-1">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button
-            key={n}
-            type="button"
-            aria-label={`${n} Sterne`}
-            onClick={() => setStars(n)}
-            className="transition-transform hover:scale-110"
-          >
-            <StarIcon filled={n <= stars} />
-          </button>
-        ))}
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <label className="text-label text-muted">
-          Level
-          <Select value={skill} onChange={(e) => setSkill(e.target.value)} className="mt-1">
-            {LEVELS.map((l) => (
-              <option key={l} value={l}>{levelLabel(l)}</option>
-            ))}
-          </Select>
-        </label>
-        <label className="text-label text-muted">
-          Sportart
-          <Select value={sport} onChange={(e) => setSport(e.target.value)} className="mt-1">
-            {SPORTS.map((s) => (
-              <option key={s} value={s}>{sportLabel(s)}</option>
-            ))}
-          </Select>
-        </label>
-      </div>
-      <Textarea
-        required
-        value={conditions}
-        onChange={(e) => setConditions(e.target.value)}
-        placeholder="Welche Bedingungen bist du gefahren? (Pflichtfeld)"
-        className="mt-2"
-        rows={2}
-      />
-      <Input
-        value={author}
-        onChange={(e) => setAuthor(e.target.value)}
-        placeholder="Vorname oder Vor- und Nachname (Pflichtfeld)"
-        className="mt-2"
-        required
-      />
-      <Honeypot value={website} onChange={setWebsite} />
-      {error && <p role="alert" className="mt-2 text-label text-red-600">{error}</p>}
-      <div className="mt-3 flex gap-2">
-        <Button type="submit" disabled={busy || !conditions.trim()}>
-          {busy ? "Senden…" : "Bewertung abgeben"}
-        </Button>
-        <Button type="button" variant="ghost" onClick={onCancel}>
-          Abbrechen
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-// --- tips (a quote list, not a card stack) ----------------------------------
-
-function Tips({ spotId }: { spotId: string }) {
-  const [items, setItems] = useState<TipItem[]>([]);
-  const [open, setOpen] = useState(false);
-  const [body, setBody] = useState("");
-  const [author, setAuthor] = useState("");
-  const [website, setWebsite] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const load = () => getTips(spotId).then((r) => setItems(r.items)).catch(() => {});
-
-  useEffect(() => {
-    void load();
-  }, [spotId]);
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!validName(author)) return setError("Bitte Vorname (oder Vor- und Nachname) angeben.");
-    setError(null);
-    setBusy(true);
-    try {
-      await postTip(spotId, { body, author_name: author.trim(), website });
-      setBody("");
-      setOpen(false);
-      load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Speichern fehlgeschlagen.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="border-t border-line pt-6">
-      <div className="flex items-center justify-between">
-        <h3 className="text-title font-semibold text-navy">Local Tips</h3>
-        {!open && (
-          <Button variant="ghost" onClick={() => setOpen(true)}>
-            Kommentar verfassen
-          </Button>
-        )}
-      </div>
-
-      {items.length === 0 ? (
-        <p className="mt-4 text-label text-muted">Noch keine Tipps.</p>
-      ) : (
-        <ul className="mt-6 space-y-6">
-          {items.map((t) => (
-            <li key={t.id} className="border-l-2 border-brand-teal/30 pl-6">
-              <QuoteIcon width={16} height={16} className="text-brand-teal/40" />
-              <p className="mt-2 text-caption uppercase tracking-[0.14em] text-muted">
-                {t.author_name}
-              </p>
-              <p className="mt-1 text-body leading-relaxed text-navy/80">{t.body}</p>
-            </li>
+    <form onSubmit={submit} className="rounded-3xl border border-line bg-white p-4 sm:p-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-body font-medium text-navy">Wie war's am {spotName}?</p>
+        <div className="flex gap-1">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              aria-label={`${n} Sterne`}
+              onClick={() => pickStar(n)}
+              className="transition-transform hover:scale-110"
+            >
+              <StarIcon filled={n <= stars} />
+            </button>
           ))}
-        </ul>
-      )}
+        </div>
+      </div>
 
-      {open && (
-        <form onSubmit={submit} className="mt-4 rounded-3xl bg-navy/5 p-4">
+      {expanded && (
+        <div className="mt-4 space-y-3">
           <Textarea
             required
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Dein Tipp für diesen Spot"
-            rows={2}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Wie waren die Bedingungen? Was sollten andere wissen? (Pflichtfeld)"
+            rows={3}
           />
+          <div className="flex flex-wrap gap-3">
+            <label className="text-label text-muted">
+              Sportart
+              <Select value={sport} onChange={(e) => setSport(e.target.value)} className="mt-1">
+                {SPORTS.map((s) => (
+                  <option key={s} value={s}>
+                    {sportLabel(s)}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="text-label text-muted">
+              Level
+              <Select value={skill} onChange={(e) => setSkill(e.target.value)} className="mt-1">
+                {LEVELS.map((l) => (
+                  <option key={l} value={l}>
+                    {levelLabel(l)}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="text-label text-muted">
+              Besuchsdatum
+              <Input
+                type="date"
+                value={visitedAt}
+                onChange={(e) => setVisitedAt(e.target.value)}
+                max={new Date().toISOString().slice(0, 10)}
+                className="mt-1"
+              />
+            </label>
+          </div>
+
           <Input
             value={author}
             onChange={(e) => setAuthor(e.target.value)}
             placeholder="Vorname oder Vor- und Nachname (Pflichtfeld)"
-            className="mt-2"
             required
           />
+
+          <div>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="text-label text-navy"
+            />
+            {file && (
+              <label className="mt-2 flex items-start gap-2 text-label text-navy">
+                <input
+                  type="checkbox"
+                  checked={accepted}
+                  onChange={(e) => setAccepted(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  Ich bestätige die{" "}
+                  <button type="button" onClick={() => setShowTerms((v) => !v)} className="underline">
+                    Rechte- &amp; Einwilligungserklärung{terms ? ` (${terms.version})` : ""}
+                  </button>
+                  .
+                </span>
+              </label>
+            )}
+            {showTerms && terms && (
+              <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-cream p-3 text-caption text-navy/80">
+                {terms.terms}
+              </pre>
+            )}
+          </div>
+
           <Honeypot value={website} onChange={setWebsite} />
-          {error && <p role="alert" className="mt-2 text-label text-red-600">{error}</p>}
-          <div className="mt-3 flex gap-2">
-            <Button type="submit" disabled={busy || !body.trim()}>
-              {busy ? "Senden…" : "Tipp teilen"}
+          {error && (
+            <p role="alert" className="text-label text-red-600">
+              {error}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Button type="submit" disabled={busy}>
+              {busy ? "Senden…" : "Veröffentlichen"}
             </Button>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+            <Button type="button" variant="ghost" onClick={reset}>
               Abbrechen
             </Button>
           </div>
-        </form>
+        </div>
+      )}
+    </form>
+  );
+}
+
+// --- feed ----------------------------------------------------------------
+
+function CommunityFeed({
+  spotId,
+  spotName,
+  posts,
+  loadError,
+  onPosted,
+}: {
+  spotId: string;
+  spotName: string;
+  posts: FeedPost[];
+  loadError: string | null;
+  onPosted: () => void;
+}) {
+  const [sort, setSort] = usePersistedState<FeedSort>("swd.communityFeedSort", "newest");
+  // Client-side only — there's no backend counter for "helpful" (no new
+  // endpoint this sprint), so this reflects this browser, not every visitor.
+  const [helpfulCounts, setHelpfulCounts] = usePersistedState<Record<string, number>>(
+    `swd.communityHelpful.${spotId}`,
+    {}
+  );
+  const [votedIds, setVotedIds] = usePersistedState<string[]>(`swd.communityVoted.${spotId}`, []);
+  const [reportFor, setReportFor] = useState<string | null>(null);
+
+  const sorted = useMemo(() => sortFeed(posts, sort, helpfulCounts), [posts, sort, helpfulCounts]);
+
+  const markHelpful = (id: string) => {
+    if (votedIds.includes(id)) return;
+    setHelpfulCounts((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
+    setVotedIds((prev) => [...prev, id]);
+  };
+
+  const composer = <Composer spotId={spotId} spotName={spotName} onPosted={onPosted} />;
+
+  return (
+    <div>
+      {posts.length === 0 ? (
+        <>
+          <div className="rounded-3xl border border-dashed border-line bg-white/60 px-6 py-8 text-center">
+            <p className="text-body font-medium text-navy">Sei der Erste, der von hier berichtet.</p>
+            <p className="mx-auto mt-2 max-w-[46ch] text-caption text-muted">
+              Hilfreiche Beiträge nennen Bedingungen, Level und was andere vor Ort wissen sollten.
+            </p>
+          </div>
+          <div className="mt-4">{composer}</div>
+        </>
+      ) : (
+        <>
+          {composer}
+
+          <div className="mt-6 flex items-center justify-end gap-1 text-label">
+            {(["newest", "helpful"] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setSort(s)}
+                aria-pressed={sort === s}
+                className={`rounded-full px-3 py-1.5 font-medium transition-colors ${
+                  sort === s ? "bg-navy text-white" : "text-muted hover:text-navy"
+                }`}
+              >
+                {s === "newest" ? "Neueste" : "Hilfreichste"}
+              </button>
+            ))}
+          </div>
+
+          <ul className="mt-4 space-y-4">
+            {sorted.map((post) => (
+              <li key={post.id}>
+                <FeedPostCard
+                  post={post}
+                  helpfulCount={helpfulCounts[post.id] ?? 0}
+                  voted={votedIds.includes(post.id)}
+                  onHelpful={() => markHelpful(post.id)}
+                  onReport={setReportFor}
+                />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {loadError && (
+        <p role="alert" className="mt-4 text-label text-red-600">
+          {loadError}
+        </p>
+      )}
+
+      {reportFor && (
+        <ReportDialog imageId={reportFor} onClose={() => setReportFor(null)} onDone={() => setReportFor(null)} />
       )}
     </div>
   );
 }
 
-// --- gallery + upload + report ----------------------------------------------
-
-/** The photo gallery — a separate export so the page can run it full-bleed
- *  in its own `SectionBand width="bleed"`, ahead of ratings/tips (Sprint 5:
- *  the product is image-led, so the gallery leads the community section). */
-export function CommunityGallery({ spotId }: { spotId: string }) {
-  const [items, setItems] = useState<CommunityImage[]>([]);
-  const [reportFor, setReportFor] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
-
-  const load = () =>
-    getSpotImages(spotId).then((r) => setItems(r.items)).catch(() => {});
+function FeedPostCard({
+  post,
+  helpfulCount,
+  voted,
+  onHelpful,
+  onReport,
+}: {
+  post: FeedPost;
+  helpfulCount: number;
+  voted: boolean;
+  onHelpful: () => void;
+  onReport: (imageId: string) => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    void load();
-  }, [spotId]);
+    if (!menuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
+  return (
+    <article className="rounded-3xl border border-line bg-white p-4 sm:p-5">
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden="true"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-label font-semibold text-white"
+          style={{ backgroundColor: avatarColor(post.authorName) }}
+        >
+          {initials(post.authorName)}
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-body font-semibold text-navy">{post.authorName}</span>
+            {post.skillLevel && (
+              <span className="rounded-full bg-navy/5 px-2 py-0.5 text-caption font-medium text-navy/70">
+                {levelLabel(post.skillLevel)}
+              </span>
+            )}
+            {post.sport && (
+              <span className="rounded-full bg-brand-teal/10 px-2 py-0.5 text-caption font-medium text-brand-teal">
+                {sportLabel(post.sport)}
+              </span>
+            )}
+          </div>
+
+          {post.stars != null && (
+            <div className="mt-1.5">
+              <Stars value={post.stars} size={14} />
+            </div>
+          )}
+
+          {post.text && <p className="mt-2 text-ui leading-relaxed text-navy/90">{post.text}</p>}
+
+          {post.photo && (
+            <img
+              src={resolveMediaUrl(post.photo.url)}
+              alt={post.photo.credit ?? ""}
+              className="mt-3 max-h-96 w-full rounded-2xl object-cover"
+              loading="lazy"
+            />
+          )}
+
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted">
+            {post.visitedAt && <span className="font-medium text-navy/70">{formatVisitDate(post.visitedAt)}</span>}
+            <span>{relativeTime(post.createdAt)}</span>
+          </div>
+
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onHelpful}
+              disabled={voted}
+              aria-pressed={voted}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-caption font-medium transition-colors disabled:cursor-default ${
+                voted
+                  ? "border-brand-green/30 bg-brand-green/10 text-brand-green"
+                  : "border-line text-muted hover:text-navy"
+              }`}
+            >
+              Hilfreich{helpfulCount > 0 ? ` · ${helpfulCount}` : ""}
+            </button>
+
+            {post.reportImageId && (
+              <div ref={menuRef} className="relative ml-auto">
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen((v) => !v)}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  aria-label="Weitere Aktionen"
+                  className="grid h-8 w-8 place-items-center rounded-full text-label text-muted hover:bg-navy/5 hover:text-navy"
+                >
+                  ⋯
+                </button>
+                {menuOpen && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-[calc(100%+6px)] z-10 w-40 rounded-xl bg-white p-1 shadow-card"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onReport(post.reportImageId!);
+                      }}
+                      className="block w-full rounded-lg px-3 py-2 text-left text-label text-navy hover:bg-cream"
+                    >
+                      Melden
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+// --- gallery filmstrip + hero-candidate proposal + report -------------------
+
+/** The filmstrip — a horizontal snap gallery that works identically at 2
+ *  photos or 20: fixed-width portrait tiles, the next one always cut off at
+ *  the edge as a scroll affordance. Its photos come from the feed (see
+ *  `feedPhotos`); the only way to add a *post* photo is the composer above —
+ *  no second upload button here. "Titelbild vorschlagen" is a distinct,
+ *  deliberately understated action (proposing the page's cover photo, via its
+ *  own admin review queue), not a second way to add a gallery photo. */
+function CommunityGalleryFilmstrip({ spotId, images }: { spotId: string; images: CommunityImage[] }) {
+  const [reportFor, setReportFor] = useState<string | null>(null);
+  const [heroFormOpen, setHeroFormOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [hoverCapable, setHoverCapable] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setHoverCapable(window.matchMedia("(hover: hover) and (pointer: fine)").matches);
+  }, []);
+
+  const updateScrollState = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
+  };
+
+  useEffect(() => {
+    updateScrollState();
+    window.addEventListener("resize", updateScrollState);
+    return () => window.removeEventListener("resize", updateScrollState);
+  }, [images]);
+
+  const scrollByTile = (dir: 1 | -1) => scrollRef.current?.scrollBy({ left: dir * 300, behavior: "smooth" });
 
   return (
     <div>
-      <div className={`flex items-center justify-between pr-4 ${INSET}`}>
+      <div className="flex items-center justify-between">
         <h3 className="text-title font-semibold text-navy">Bildergalerie</h3>
-        {!open && (
+        {!heroFormOpen && (
           <button
             type="button"
-            onClick={() => setOpen(true)}
-            className="grid h-8 w-8 place-items-center rounded-full bg-navy text-title leading-none text-white hover:bg-navy-dark"
-            aria-label="Bild hinzufügen"
-            title="Bild hinzufügen"
+            onClick={() => setHeroFormOpen(true)}
+            className="text-label font-medium text-brand-teal hover:text-brand-teal-dark"
           >
-            +
+            Titelbild vorschlagen
           </button>
         )}
       </div>
 
-      {items.length === 0 ? (
-        <p className={`mt-3 text-label text-muted ${INSET}`}>Noch keine Bilder.</p>
+      {images.length === 0 ? (
+        <div className="mt-4 rounded-3xl border border-dashed border-line bg-cream/60 px-6 py-10 text-center">
+          <p className="text-body font-medium text-navy">Noch keine Bilder von diesem Spot.</p>
+          <p className="mx-auto max-w-[42ch] text-caption text-muted">
+            Fotos kommen aus den Beiträgen weiter unten — teil deins mit dem ersten Bericht.
+          </p>
+        </div>
       ) : (
-        <div className={`mt-4 flex snap-x-mandatory gap-4 overflow-x-auto no-scrollbar pb-2 pr-4 ${INSET}`}>
-          {items.map((img) => (
-            <figure
-              key={img.id}
-              className="group relative aspect-[3/4] w-[260px] shrink-0 snap-start overflow-hidden rounded-3xl"
+        <div className="relative mt-4">
+          {hoverCapable && canScrollLeft && (
+            <button
+              type="button"
+              onClick={() => scrollByTile(-1)}
+              aria-label="Zurückscrollen"
+              className="absolute left-2 top-1/2 z-10 hidden -translate-y-1/2 place-items-center rounded-full bg-white/90 p-2 text-navy shadow-pill transition-colors hover:bg-white sm:grid"
             >
-              <img
-                src={resolveMediaUrl(img.url)}
-                alt={img.credit ?? ""}
-                className="h-full w-full object-cover"
-                loading="lazy"
-              />
-              {img.credit && (
-                <figcaption className="absolute inset-x-0 bottom-0 bg-navy/60 px-3 py-1.5 text-caption text-white">
-                  {img.credit}
-                </figcaption>
-              )}
-              {/* Always visible (not hover-only) so it's reachable on touch,
-                  not just with a mouse. */}
-              <button
-                type="button"
-                onClick={() => setReportFor(img.id)}
-                className="absolute right-2 top-2 rounded-full bg-white/90 px-2.5 py-1 text-caption font-medium text-navy transition-colors hover:bg-white"
+              <ChevronDownIcon width={18} height={18} className="rotate-90" />
+            </button>
+          )}
+          {hoverCapable && canScrollRight && (
+            <button
+              type="button"
+              onClick={() => scrollByTile(1)}
+              aria-label="Weiterscrollen"
+              className="absolute right-2 top-1/2 z-10 hidden -translate-y-1/2 place-items-center rounded-full bg-white/90 p-2 text-navy shadow-pill transition-colors hover:bg-white sm:grid"
+            >
+              <ChevronDownIcon width={18} height={18} className="-rotate-90" />
+            </button>
+          )}
+
+          <div
+            ref={scrollRef}
+            onScroll={updateScrollState}
+            className="flex snap-x-mandatory gap-2 overflow-x-auto no-scrollbar pb-2"
+          >
+            {images.map((img, i) => (
+              <figure
+                key={img.id}
+                className="group relative aspect-[14/19] w-[280px] shrink-0 snap-start overflow-hidden rounded-3xl"
               >
-                Melden
-              </button>
-            </figure>
-          ))}
+                <button
+                  type="button"
+                  onClick={() => setLightboxIndex(i)}
+                  aria-label={`Bild vergrößern${img.credit ? ` — ${img.credit}` : ""}`}
+                  className="absolute inset-0 h-full w-full"
+                >
+                  <img
+                    src={resolveMediaUrl(img.url)}
+                    alt={img.credit ?? ""}
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                    loading="lazy"
+                  />
+                </button>
+                {img.credit && (
+                  <figcaption className="pointer-events-none absolute inset-x-0 bottom-0 bg-navy/60 px-3 py-1.5 text-caption text-white">
+                    {img.credit}
+                  </figcaption>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setReportFor(img.id)}
+                  className="absolute right-2 top-2 rounded-full bg-white/90 px-2.5 py-1 text-caption font-medium text-navy transition-colors hover:bg-white"
+                >
+                  Melden
+                </button>
+              </figure>
+            ))}
+          </div>
         </div>
       )}
 
       {reportFor && (
-        <div className={INSET}>
-          <ReportDialog
-            imageId={reportFor}
-            onClose={() => setReportFor(null)}
-            onDone={() => setReportFor(null)}
-          />
-        </div>
+        <ReportDialog imageId={reportFor} onClose={() => setReportFor(null)} onDone={() => setReportFor(null)} />
       )}
 
-      {open && (
-        <div className={INSET}>
-          <UploadForm spotId={spotId} onCancel={() => setOpen(false)} onDone={load} />
-        </div>
+      {heroFormOpen && (
+        <HeroCandidateForm spotId={spotId} onCancel={() => setHeroFormOpen(false)} onDone={() => setHeroFormOpen(false)} />
       )}
+
+      {lightboxIndex !== null && (
+        <Lightbox
+          items={images}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onIndexChange={setLightboxIndex}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Full-screen lightbox: blurred scrim, swipe (touch) / arrow keys (desktop)
+ *  to move between images, Esc to close, and a Tab-cycling focus trap so
+ *  keyboard focus can't escape onto the page behind it. */
+function Lightbox({
+  items,
+  index,
+  onClose,
+  onIndexChange,
+}: {
+  items: CommunityImage[];
+  index: number;
+  onClose: () => void;
+  onIndexChange: (i: number) => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const touchStartX = useRef<number | null>(null);
+  const go = (delta: number) => onIndexChange((index + delta + items.length) % items.length);
+
+  useEffect(() => {
+    dialogRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key === "ArrowRight") return go(1);
+      if (e.key === "ArrowLeft") return go(-1);
+      if (e.key === "Tab") {
+        const root = dialogRef.current;
+        if (!root) return;
+        const focusables = root.querySelectorAll<HTMLElement>(
+          'button, [href], [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [index, items.length]);
+
+  const img = items[index];
+
+  return (
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Bildergalerie, groß"
+      tabIndex={-1}
+      className="fixed inset-0 z-[1000] flex items-center justify-center bg-navy-dark/85 p-4 backdrop-blur-md"
+      onClick={onClose}
+      onTouchStart={(e) => {
+        touchStartX.current = e.touches[0].clientX;
+      }}
+      onTouchEnd={(e) => {
+        if (touchStartX.current == null) return;
+        const dx = e.changedTouches[0].clientX - touchStartX.current;
+        if (Math.abs(dx) > 40) go(dx > 0 ? -1 : 1);
+        touchStartX.current = null;
+      }}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Schließen"
+        className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+      >
+        <CloseIcon width={20} height={20} />
+      </button>
+
+      {items.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              go(-1);
+            }}
+            aria-label="Vorheriges Bild"
+            className="absolute left-4 top-1/2 hidden h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 sm:grid"
+          >
+            <ChevronDownIcon width={20} height={20} className="rotate-90" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              go(1);
+            }}
+            aria-label="Nächstes Bild"
+            className="absolute right-4 top-1/2 hidden h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 sm:grid"
+          >
+            <ChevronDownIcon width={20} height={20} className="-rotate-90" />
+          </button>
+        </>
+      )}
+
+      <figure className="max-w-[92vw]" onClick={(e) => e.stopPropagation()}>
+        <img
+          src={resolveMediaUrl(img.url)}
+          alt={img.credit ?? ""}
+          className="max-h-[80vh] max-w-[92vw] rounded-2xl object-contain"
+        />
+        {img.credit && <figcaption className="mt-3 text-center text-caption text-white/80">{img.credit}</figcaption>}
+      </figure>
     </div>
   );
 }
@@ -526,7 +888,12 @@ function ReportDialog({
   );
 }
 
-function UploadForm({
+/** Proposing the page's *hero* photo is a different action from adding a
+ *  gallery photo (it goes through its own admin review queue) — kept as its
+ *  own small, deliberately understated form rather than folded into the main
+ *  composer, so "share what happened here" and "suggest a new cover photo"
+ *  don't compete for attention. */
+function HeroCandidateForm({
   spotId,
   onDone,
   onCancel,
@@ -535,7 +902,6 @@ function UploadForm({
   onDone: () => void;
   onCancel: () => void;
 }) {
-  const [kind, setKind] = useState<"gallery" | "hero_candidate">("gallery");
   const [file, setFile] = useState<File | null>(null);
   const [credit, setCredit] = useState("");
   const [accepted, setAccepted] = useState(false);
@@ -552,7 +918,7 @@ function UploadForm({
 
   const pickFile = async (f: File | null) => {
     setError(null);
-    if (f && kind === "hero_candidate") {
+    if (f) {
       const res = await validateHeroFile(f);
       if (!res.ok) {
         setError(res.reason ?? "Bild erfüllt die Hero-Vorgaben nicht.");
@@ -570,19 +936,14 @@ function UploadForm({
     setBusy(true);
     setError(null);
     try {
-      await uploadSpotImage(spotId, file, kind, { credit: credit || undefined, licenseAccept: accepted });
+      await uploadSpotImage(spotId, file, "hero_candidate", { credit: credit || undefined, licenseAccept: accepted });
       setFile(null);
       setCredit("");
       setAccepted(false);
-      setNotice(
-        kind === "hero_candidate"
-          ? "Danke! Dein Hero-Vorschlag wartet auf Freigabe."
-          : "Danke! Dein Bild ist in der Galerie."
-      );
-      onDone();
+      setNotice("Danke! Dein Titelbild-Vorschlag wartet auf Freigabe.");
       setTimeout(() => {
         setNotice(null);
-        onCancel();
+        onDone();
       }, 1800);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Upload fehlgeschlagen.");
@@ -592,43 +953,28 @@ function UploadForm({
   };
 
   return (
-    <form onSubmit={submit} className="mt-5 rounded-3xl bg-navy/5 p-4">
+    <form onSubmit={submit} className="mt-4 rounded-3xl bg-navy/5 p-4">
       <div className="flex items-center justify-between">
-        <p className="text-ui font-medium text-navy">Bild hinzufügen</p>
+        <p className="text-ui font-medium text-navy">Titelbild vorschlagen</p>
         <button type="button" onClick={onCancel} className="text-label text-muted hover:text-navy">
           Schließen
         </button>
       </div>
-      <div className="mt-2 flex flex-wrap gap-2">
-        <Select
-          value={kind}
-          onChange={(e) => {
-            setKind(e.target.value as "gallery" | "hero_candidate");
-            setFile(null);
-          }}
-        >
-          <option value="gallery">Galerie</option>
-          <option value="hero_candidate">Titelbild-Kandidat</option>
-        </Select>
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
-          className="text-label text-navy"
-        />
-      </div>
-      {kind === "hero_candidate" && (
-        <p className="mt-1 text-caption text-muted">
-          Titelbild: mind. {HERO_REQ.minWidth}×{HERO_REQ.minHeight} px, Querformat, JPG/PNG/WebP.
-        </p>
-      )}
+      <p className="mt-1 text-caption text-muted">
+        Mind. {HERO_REQ.minWidth}×{HERO_REQ.minHeight} px, Querformat, JPG/PNG/WebP.
+      </p>
+      <input
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+        className="mt-2 text-label text-navy"
+      />
       <Input
         value={credit}
         onChange={(e) => setCredit(e.target.value)}
         placeholder="Credit: Name oder Instagram (optional)"
         className="mt-2"
       />
-
       <label className="mt-3 flex items-start gap-2 text-label text-navy">
         <input
           type="checkbox"
@@ -649,12 +995,11 @@ function UploadForm({
           {terms.terms}
         </pre>
       )}
-
       <Honeypot value={website} onChange={setWebsite} />
       {error && <p role="alert" className="mt-2 text-label text-red-600">{error}</p>}
       {notice && <p role="status" className="mt-2 text-label text-brand-green">{notice}</p>}
       <Button type="submit" disabled={busy || !file || !accepted} className="mt-3">
-        {busy ? "Hochladen…" : "Hochladen"}
+        {busy ? "Hochladen…" : "Vorschlagen"}
       </Button>
     </form>
   );

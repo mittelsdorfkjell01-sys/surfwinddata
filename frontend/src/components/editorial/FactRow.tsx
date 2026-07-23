@@ -1,8 +1,10 @@
 /**
  * An "at a glance" facts list. `variant="row"` (default) is the inline
  * definition list, ruled top and bottom — the editorial alternative to a grid
- * of little cards. `variant="rail"` is the hairline-table look for the
- * sticky spec rail next to the lede. Renders nothing when there are no facts.
+ * of little cards. `variant="rail"` is stacked "data blocks" (label small and
+ * teal above a bold value) for the Steckbrief module next to Facilities —
+ * two columns from `sm`, one hairline above the whole block instead of a rule
+ * per row. Renders nothing when there are no facts.
  */
 export default function FactRow({
   items,
@@ -19,11 +21,13 @@ export default function FactRow({
         <p className="text-caption font-medium uppercase tracking-[0.18em] text-brand-teal">
           Steckbrief
         </p>
-        <dl className="mt-4 divide-y divide-line border-t border-line">
+        <dl className="mt-4 grid grid-cols-1 gap-x-10 gap-y-7 border-t border-line pt-6 sm:grid-cols-2">
           {items.map((f) => (
-            <div key={f.label} className="flex items-baseline justify-between gap-6 py-4">
-              <dt className="text-caption uppercase tracking-[0.12em] text-muted">{f.label}</dt>
-              <dd className="text-right text-body font-medium text-navy">{f.value}</dd>
+            <div key={f.label}>
+              <dt className="text-caption font-medium uppercase tracking-[0.18em] text-brand-teal">
+                {f.label}
+              </dt>
+              <dd className="mt-1.5 text-title font-semibold text-navy">{f.value}</dd>
             </div>
           ))}
         </dl>

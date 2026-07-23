@@ -1,34 +1,33 @@
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import LandingHeader from "../components/LandingHeader";
 import Facilities from "../components/Facilities";
+import LocatorMap from "../components/LocatorMap";
 import SpotFlowMap from "../components/SpotFlowMap";
-import SpotSubnav from "../components/SpotSubnav";
+import SpotTabs from "../components/SpotTabs";
 import Forecast from "../components/Forecast";
 import WindMonths from "../components/WindMonths";
 import SimilarSpots from "../components/SimilarSpots";
-import SpotCommunity, { CommunityGallery } from "../components/SpotCommunity";
+import SpotCommunitySection from "../components/SpotCommunity";
 import Footer from "../components/Footer";
 import {
   EditorialHero,
   SectionBand,
   Lede,
   FactRow,
-  ConditionsBand,
+  SpotIdentityCard,
 } from "../components/editorial";
 import { ErrorBanner, EmptyState } from "../components/AsyncStates";
 import { ChevronDownIcon } from "../lib/icons";
 import { regionSlug } from "../lib/types";
 import { useSpot, useSpotLive, useSpotForecast } from "../lib/hooks";
 import { facilitiesFromMap, spotFactsFrom } from "../lib/spotView";
-import {
-  climatologyToMonths,
-  forecastToDays,
-  waterTypeFromCharacter,
-} from "../lib/seasonView";
+import { climatologyToMonths, waterTypeFromCharacter } from "../lib/seasonView";
 
 export default function SpotDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const activeTab = location.pathname.endsWith("/daten") ? "daten" : "info";
   const { data: spot, loading, error, reload } = useSpot(id);
   const { data: live } = useSpotLive(id);
   const { data: forecast, loading: forecastLoading, error: forecastError } =
@@ -70,40 +69,25 @@ export default function SpotDetail() {
   // All from the backend record — no synthetic data.
   const facts = spotFactsFrom(spot);
   const facilities = facilitiesFromMap(spot.facilities);
-  const forecastDays = forecast ? forecastToDays(forecast) : null;
   const months = climatologyToMonths(spot.climatology);
   const waterType = waterTypeFromCharacter(spot.waterCharacter);
   const currentWind = live?.current.wind ?? undefined;
-  const coords = spot.coords ?? [41.18, 9.32];
+  const mapCoords = spot.coords ?? [41.18, 9.32];
   const windDir = live?.current.dir ?? spot.windDir ?? 320;
   const regionName = spot.region.split(",")[0].trim() || spot.name;
-  const parts = spot.region.split(",").map((p) => p.trim());
-  const [regionPart, country] = parts;
-  const breadcrumb: { label: string; to?: string }[] = [
-    country ? { label: country } : undefined,
-    regionPart ? { label: regionPart, to: `/region/${regionSlug(spot.region)}` } : undefined,
-    { label: spot.name },
-  ].filter((c): c is { label: string; to?: string } => Boolean(c));
+  const [regionPart, country] = spot.region.split(",").map((p) => p.trim());
+  const regionHref = `/region/${regionSlug(spot.region)}`;
 
-  const sections = [
-    { id: "ueberblick", label: "Überblick" },
-    { id: "karte", label: "Wind & Wellen" },
-    { id: "saison", label: "Saison" },
-    { id: "community", label: "Community" },
-    { id: "aehnliche", label: "Ähnliche Spots" },
-  ];
+  const tabs = id
+    ? [
+        { id: "info", label: "Info", href: `/spot/${id}` },
+        { id: "daten", label: "Daten", href: `/spot/${id}/daten` },
+      ]
+    : [];
 
   return (
     <div className="relative min-h-screen bg-white">
       <LandingHeader />
-      <SpotSubnav
-        name={spot.name}
-        wind={currentWind}
-        windDir={windDir}
-        breadcrumb={breadcrumb}
-        sections={sections}
-        onBack={goBack}
-      />
 
       <main>
         <EditorialHero
@@ -112,21 +96,9 @@ export default function SpotDetail() {
           alt={spot.name}
           credit={spot.heroCredit}
           kicker={
-            <Link
-              to={`/region/${regionSlug(spot.region)}`}
-              className="text-white/85 transition-colors hover:text-white"
-            >
+            <Link to={regionHref} className="text-white/85 transition-colors hover:text-white">
               {regionName}
             </Link>
-          }
-          title={spot.name}
-          meta={
-            currentWind ? (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-dot" />
-                {currentWind} kts <span className="text-white/70">gerade</span>
-              </span>
-            ) : undefined
           }
         >
           <button
@@ -140,119 +112,122 @@ export default function SpotDetail() {
           </button>
         </EditorialHero>
 
-        {/* Conditions now — overlaps the hero's bottom edge, clamping hero to content */}
+        {/* Name, breadcrumb, coordinates, live wind — overlaps the hero's bottom edge */}
         <div className="relative z-20 mx-auto max-w-[1180px] px-4 sm:px-8">
-          <ConditionsBand live={live} variant="card" />
+          <SpotIdentityCard
+            name={spot.name}
+            regionName={regionPart}
+            country={country}
+            regionHref={regionHref}
+            coords={spot.coords}
+            live={live}
+          />
         </div>
 
-        {/* 01 — Überblick: lede + sticky spec rail */}
-        <SectionBand id="ueberblick" tone="white" kicker="01 — Überblick">
-          <div className="grid gap-x-16 gap-y-12 lg:grid-cols-12">
-            <div className="lg:col-span-7">
-              <Lede dropcap>{spot.description}</Lede>
-            </div>
-            <aside className="lg:col-span-4 lg:col-start-9">
-              <div className="space-y-12 lg:sticky lg:top-24">
-                <FactRow items={facts} variant="rail" />
-                {facilities.length > 0 && <Facilities items={facilities} variant="rail" />}
-              </div>
-            </aside>
-          </div>
-        </SectionBand>
+        {tabs.length > 0 && <SpotTabs tabs={tabs} live={live} />}
 
-        {/* 02 — Wind & Wellen: centered narrow intro, then the full-bleed flow map */}
-        <SectionBand
-          id="karte"
-          tone="white"
-          width="narrow"
-          align="center"
-          kicker="02 — Wind & Wellen"
-          heading="Wie es hier läuft"
-          intro="Windstreifen ziehen mit dem Wind, Wellenlinien laufen auf die Küste zu — live aus den aktuellen Bedingungen."
-        />
-        <SectionBand tone="white" width="bleed" pad="md">
-          <div className="relative">
-            <SpotFlowMap
-              coords={coords}
-              windDir={windDir}
-              windKts={currentWind ?? spot.wind}
-              waveDir={spot.waveDir ?? windDir}
-              coast={spot.coast ?? ((spot.waveDir ?? windDir) + 180) % 360}
-              period={live?.current.period ?? 5}
-              waterType={waterType}
-              zoom={spot.mapView?.zoom}
-              mapCenter={spot.mapView?.center}
-              rounded={false}
-            />
-            <div className="glass-white pointer-events-none absolute bottom-4 left-4 z-10 flex items-center gap-4 rounded-full px-4 py-2 text-caption text-navy">
-              <span className="flex items-center gap-1.5">
-                <span className="inline-block h-0.5 w-4 rounded-full bg-navy/60" />
-                Wind
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="inline-block h-0.5 w-4 rounded-full bg-[#2F6FB0]" />
-                Welle
-              </span>
-            </div>
-          </div>
-        </SectionBand>
-
-        {/* 03 — Saison: the product's actual promise, ahead of the live forecast */}
-        {months && (
-          <SectionBand id="saison" tone="navy" width="wide" kicker="03 — Saison" heading="Wann hierher?">
-            <WindMonths data={months} />
-          </SectionBand>
-        )}
-
-        {/* Die nächsten 7 Tage — small and after, per the season-first hierarchy */}
-        {(forecastLoading || forecastDays?.length) && (
-          <SectionBand tone="white" width="content" pad="md" heading="Die nächsten 7 Tage">
-            {forecastLoading && <div className="h-56 animate-pulse rounded-3xl bg-line" />}
-            {!forecastLoading && forecastDays && forecastDays.length > 0 && (
-              <Forecast days={forecastDays} />
-            )}
-            {!forecastLoading && (!forecastDays || forecastDays.length === 0) && (
-              <EmptyState
-                message={
-                  forecastError
-                    ? "7-Tage-Vorhersage momentan nicht verfügbar."
-                    : "Keine Vorhersage-Daten."
-                }
-              />
-            )}
-          </SectionBand>
-        )}
-
-        {/* 04 — Community: gallery leads (full-bleed), ratings + tips follow */}
-        {id && (
+        {activeTab === "info" && (
           <>
-            <SectionBand
-              id="community"
-              tone="cream"
-              kicker="04 — Community"
-              heading="Community"
-              intro="Erfahrungen, Tipps und Bilder von anderen vor Ort. Bitte fair und sachlich bleiben."
-            />
-            <SectionBand tone="cream" width="bleed" pad="md">
-              <CommunityGallery spotId={id} />
+            {/* Beschreibung: full-width lede, no more sticky rail */}
+            <SectionBand tone="white" kicker="Überblick">
+              <Lede dropcap>{spot.description}</Lede>
             </SectionBand>
-            <SectionBand tone="cream" pad="md">
-              <SpotCommunity spotId={id} />
+
+            {/* Steckbrief + Facilities: equal-weight two-up */}
+            <SectionBand tone="white">
+              <div className="grid gap-x-16 gap-y-12 lg:grid-cols-2">
+                <FactRow items={facts} variant="rail" />
+                <Facilities items={facilities} variant="rail" />
+              </div>
+            </SectionBand>
+
+            {/* Locator-Karte: only ever shown with real coordinates */}
+            {spot.coords && (
+              <SectionBand tone="white" kicker="Lage">
+                <LocatorMap coords={spot.coords} />
+              </SectionBand>
+            )}
+
+            {/* Bildergalerie + Community-Feed — one shared fetch, see SpotCommunitySection */}
+            {id && <SpotCommunitySection spotId={id} spotName={spot.name} />}
+
+            {/* Ähnliche Spots */}
+            <SectionBand
+              tone="white"
+              kicker="In der Nähe"
+              heading="Ähnliche Spots"
+              intro="Vergleichbare Reviere nach Charakter und Windstärke"
+            >
+              <SimilarSpots spot={spot} />
             </SectionBand>
           </>
         )}
 
-        {/* 05 — Ähnliche Spots */}
-        <SectionBand
-          id="aehnliche"
-          tone="white"
-          width="wide"
-          kicker="05 — In der Nähe"
-          heading="Ähnliche Spots"
-          intro="Vergleichbare Reviere nach Charakter und Windstärke"
-        >
-          <SimilarSpots spot={spot} />
-        </SectionBand>
+        {activeTab === "daten" && (
+          <>
+            {/* Wind & Wellen: centered narrow intro, then the flow map */}
+            <SectionBand
+              tone="white"
+              width="narrow"
+              align="center"
+              kicker="Wind & Wellen"
+              heading="Wie es hier läuft"
+              intro="Windstreifen ziehen mit dem Wind, Wellenlinien laufen auf die Küste zu — live aus den aktuellen Bedingungen."
+            />
+            <SectionBand tone="white" pad="md">
+              <div className="relative">
+                <SpotFlowMap
+                  coords={mapCoords}
+                  windDir={windDir}
+                  windKts={currentWind ?? spot.wind}
+                  waveDir={spot.waveDir ?? windDir}
+                  coast={spot.coast ?? ((spot.waveDir ?? windDir) + 180) % 360}
+                  period={live?.current.period ?? 5}
+                  waterType={waterType}
+                  zoom={spot.mapView?.zoom}
+                  mapCenter={spot.mapView?.center}
+                  live={live}
+                />
+                <div className="glass-white pointer-events-none absolute bottom-4 left-4 z-10 flex items-center gap-4 rounded-full px-4 py-2 text-caption text-navy">
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-0.5 w-4 rounded-full bg-navy/60" />
+                    Wind
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-0.5 w-4 rounded-full bg-[#2F6FB0]" />
+                    Welle
+                  </span>
+                </div>
+              </div>
+            </SectionBand>
+
+            {/* Die nächsten 7 Tage — vor den Windmonaten */}
+            {(forecastLoading || forecast?.days.length) && (
+              <SectionBand tone="white" pad="md" heading="Die nächsten 7 Tage">
+                {forecastLoading && <div className="h-56 animate-pulse rounded-3xl bg-line" />}
+                {!forecastLoading && forecast && forecast.days.length > 0 && (
+                  <Forecast forecast={forecast} coords={spot.coords} />
+                )}
+                {!forecastLoading && (!forecast || forecast.days.length === 0) && (
+                  <EmptyState
+                    message={
+                      forecastError
+                        ? "7-Tage-Vorhersage momentan nicht verfügbar."
+                        : "Keine Vorhersage-Daten."
+                    }
+                  />
+                )}
+              </SectionBand>
+            )}
+
+            {/* Saison */}
+            {months && (
+              <SectionBand tone="white" kicker="Saison" heading="Wann hierher?">
+                <WindMonths climatology={spot.climatology} />
+              </SectionBand>
+            )}
+          </>
+        )}
       </main>
 
       <Footer />

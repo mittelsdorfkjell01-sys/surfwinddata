@@ -3,8 +3,8 @@
 // backend has no data (e.g. a spot without a derived climatology) so the page
 // can hide the panel instead of inventing numbers.
 
-import type { ForecastSeries, RegionSeasonResponse } from "./api";
-import type { ForecastDay, MonthWind, RegionMonth, WaterType } from "./types";
+import type { ForecastHour, ForecastSeries, RegionSeasonResponse } from "./api";
+import type { DayBlock, DayBlocks, DayHours, HourBlock, MonthWind, RegionMonth, WaterType } from "./types";
 
 const WEEKDAYS = ["SO", "MO", "DI", "MI", "DO", "FR", "SA"]; // Date.getDay(): 0 = Sun
 const MONTHS = ["JAN", "FEB", "MÄR", "APR", "MAI", "JUN", "JUL", "AUG", "SEP", "OKT", "NOV", "DEZ"];
@@ -34,22 +34,126 @@ function windowYears(window: unknown): number {
   return 20;
 }
 
-/** 7-day forecast → the strip's per-day view. */
-export function forecastToDays(fc: ForecastSeries): ForecastDay[] {
+// Hour-of-day from an hourly forecast timestamp ("YYYY-MM-DDTHH:MM…").
+// String slicing, not `new Date(...).getHours()` — the backend requests
+// Open-Meteo with timezone=auto, so these strings are already the spot's
+// local wall-clock time with no offset; parsing them as a Date would let the
+// *browser's* timezone quietly reinterpret the hour.
+const hourOf = (time: string) => Number(time.slice(11, 13));
+
+// "2026-07-23" → "23.07." for the compact day-column/detail-graph headers.
+function shortDate(dateStr: string): string {
+  const dt = new Date(dateStr);
+  if (Number.isNaN(dt.getTime())) return dateStr;
+  const dd = String(dt.getDate()).padStart(2, "0");
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  return `${dd}.${mm}.`;
+}
+
+const weekdayOf = (dateStr: string) => {
+  const dt = new Date(dateStr);
+  return Number.isNaN(dt.getTime()) ? dateStr.slice(5) : WEEKDAYS[dt.getDay()];
+};
+
+/** Hours of `day` whose local hour falls in `[start, end)`. */
+function hoursInWindow(hours: ForecastHour[], start: number, end: number): ForecastHour[] {
+  return hours.filter((h) => {
+    const hr = hourOf(h.time);
+    return hr >= start && hr < end;
+  });
+}
+
+const windowLabel = (start: number, end: number) =>
+  `${String(start).padStart(2, "0")}–${String(end).padStart(2, "0")}`;
+
+// Ebene 1: 5 × 3h blocks, 06–21h.
+const BLOCKS_L1: [number, number][] = [
+  [6, 9],
+  [9, 12],
+  [12, 15],
+  [15, 18],
+  [18, 21],
+];
+
+/** 7-day forecast → the always-visible weekly overview (Ebene 1): one column
+ *  per day, 5 three-hour blocks each. Each block shows its *best* hour (the
+ *  highest average wind within it), not a block average — the point is "when
+ *  today's peak window is", not a smoothed-over mean. Missing hours (null
+ *  wind) are skipped; a block with no usable hour at all is null, not 0. */
+export function forecastToBlocks(fc: ForecastSeries): DayBlocks[] {
   return fc.days.map((d) => {
-    const dt = new Date(d.date);
-    const day = Number.isNaN(dt.getTime()) ? d.date.slice(5) : WEEKDAYS[dt.getDay()];
-    // Representative wind direction: prefer a midday hour, else the first known dir.
-    const mid =
-      d.hours.find((h) => h.time.includes("T12") && h.dir != null) ??
+    const blocks: DayBlock[] = BLOCKS_L1.map(([start, end]) => {
+      let best: ForecastHour | null = null;
+      for (const h of hoursInWindow(d.hours, start, end)) {
+        if (h.wind == null) continue;
+        if (best?.wind == null || h.wind > best.wind) best = h;
+      }
+      return { label: windowLabel(start, end), wind: best?.wind ?? null, dir: best?.dir ?? null };
+    });
+
+    const midday =
+      d.hours.find((h) => hourOf(h.time) === 12 && h.dir != null) ??
       d.hours.find((h) => h.dir != null);
-    const wind = Math.round(d.summary.wind_max ?? d.summary.wind_avg ?? 0);
+    const maxWind = blocks.reduce<number | null>(
+      (m, b) => (b.wind == null ? m : m == null ? b.wind : Math.max(m, b.wind)),
+      null
+    );
+
     return {
-      day,
-      wind,
-      windDir: mid?.dir ?? 0,
-      wave: Math.round((d.summary.swell_max ?? 0) * 10) / 10,
-      good: wind >= 18, // simple visual cue; the real rating is the score engine
+      day: weekdayOf(d.date),
+      date: shortDate(d.date),
+      blocks,
+      windDir: midday?.dir ?? null,
+      maxWind,
+    };
+  });
+}
+
+// Ebene 2: 8 × 2h blocks, 06–22h.
+const BLOCKS_L2: [number, number][] = [
+  [6, 8],
+  [8, 10],
+  [10, 12],
+  [12, 14],
+  [14, 16],
+  [16, 18],
+  [18, 20],
+  [20, 22],
+];
+
+const meanOf = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+
+/** 7-day forecast → the collapsible per-day detail graphs (Ebene 2): 8
+ *  two-hour blocks, each an honest *average* wind (unlike Ebene 1's best-hour
+ *  blocks — here the point is the realistic expectation for that window) plus
+ *  the window's peak gust, for the gust curve. Direction is one representative
+ *  hour's reading (a real bearing), never an arithmetic mean of angles. */
+export function forecastToHourly(fc: ForecastSeries): DayHours[] {
+  return fc.days.map((d) => {
+    const blocks: HourBlock[] = BLOCKS_L2.map(([start, end]) => {
+      const inWindow = hoursInWindow(d.hours, start, end);
+      const winds = inWindow.map((h) => h.wind).filter((v): v is number => v != null);
+      const gusts = inWindow.map((h) => h.gust).filter((v): v is number => v != null);
+      const dir = inWindow.find((h) => h.dir != null)?.dir ?? null;
+      const windAvg = meanOf(winds);
+      return {
+        label: windowLabel(start, end),
+        windAvg: windAvg == null ? null : Math.round(windAvg * 10) / 10,
+        gustMax: gusts.length ? Math.max(...gusts) : null,
+        dir,
+      };
+    });
+
+    const periods = d.hours.map((h) => h.period).filter((v): v is number => v != null);
+    const wavePeriod = meanOf(periods);
+
+    return {
+      day: weekdayOf(d.date),
+      date: shortDate(d.date),
+      blocks,
+      waveHeight: d.summary.swell_max ?? null,
+      wavePeriod: wavePeriod == null ? null : Math.round(wavePeriod),
+      airTemp: d.summary.air_max ?? null,
     };
   });
 }
@@ -86,6 +190,60 @@ export function climatologyToMonths(clim: Record<string, any> | null | undefined
       0
     );
     buckets[monthOfWeek(w.week ?? 0)].push(Math.round((strongHours / years) * 10) / 10);
+  }
+  const out: MonthWind[] = MONTHS.map((month, i) => ({
+    month,
+    weeks: buckets[i].length ? buckets[i] : [0],
+  }));
+  return out.some((m) => m.weeks.some((v) => v > 0)) ? out : null;
+}
+
+/** The speed (kt) at percentile `p` of an hours-weighted histogram, given
+ *  each bin's lower edge and hour count — linear interpolation within the bin
+ *  the percentile falls in. The last bin is open-ended (≥ its lower edge), so
+ *  it's extrapolated to the same width as the bin before it. `null` for an
+ *  empty histogram (no hours at all). */
+function percentileFromHistogram(binHours: number[], binEdges: number[], p: number): number | null {
+  const total = binHours.reduce((a, b) => a + b, 0);
+  if (total <= 0) return null;
+  const target = (p / 100) * total;
+  let cum = 0;
+  for (let i = 0; i < binHours.length; i++) {
+    const next = cum + binHours[i];
+    if (next >= target || i === binHours.length - 1) {
+      const lower = binEdges[i];
+      const upper = i + 1 < binEdges.length ? binEdges[i + 1] : lower + (lower - (binEdges[i - 1] ?? 0));
+      const withinBin = binHours[i] > 0 ? (target - cum) / binHours[i] : 0;
+      return lower + Math.max(0, Math.min(1, withinBin)) * (upper - lower);
+    }
+    cum = next;
+  }
+  return binEdges[binEdges.length - 1];
+}
+
+/** Spot climatology → monthly bars of the **P`p` wind speed per week** (default
+ *  use: P75, "how strong does it blow on the windy days"), or null.
+ *
+ * The mean wind barely moves across the year (the reason `climatologyToMonths`
+ * exists at all) — but the upper-quartile speed does, and reads as a much more
+ * legible season signal. Computed straight from the histogram (hours summed
+ * across all direction sectors per speed bin, then the percentile speed
+ * interpolated from that), not from the rideable-hours bins `climatologyToMonths`
+ * uses. Returns null when there's no usable histogram.
+ */
+export function climatologyToPercentile(clim: Record<string, any> | null | undefined, p: number): MonthWind[] | null {
+  const weeks = clim?.weeks;
+  if (!Array.isArray(weeks) || weeks.length === 0) return null;
+  const buckets: number[][] = Array.from({ length: 12 }, () => []);
+  for (const w of weeks) {
+    const joint = w?.wind?.joint;
+    if (!Array.isArray(joint)) continue;
+    // Hours per speed bin, summed across all direction sectors.
+    const binHours = WIND_SPEED_BINS_KT.map((_, i) =>
+      joint.reduce((sum: number, row: number[]) => sum + (Array.isArray(row) ? Number(row[i]) || 0 : 0), 0)
+    );
+    const value = percentileFromHistogram(binHours, WIND_SPEED_BINS_KT, p);
+    if (value != null) buckets[monthOfWeek(w.week ?? 0)].push(Math.round(value * 10) / 10);
   }
   const out: MonthWind[] = MONTHS.map((month, i) => ({
     month,

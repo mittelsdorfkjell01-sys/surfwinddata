@@ -1,6 +1,12 @@
-import { useEffect, useRef } from "react";
-import { MapContainer, TileLayer, useMap } from "react-leaflet";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MapContainer, Marker, TileLayer, useMap } from "react-leaflet";
+import { animate as animateValue, motion, useInView, useReducedMotion } from "framer-motion";
+import L from "leaflet";
+import type { LiveConditionsRead } from "../lib/api";
 import type { WaterType } from "../lib/types";
+import { windColor } from "../lib/windScale";
+import { degToCompass } from "./WindRose";
+import WindArrow from "./WindArrow";
 
 const rad = (deg: number) => (deg * Math.PI) / 180;
 const MAP_ZOOM = 14.5;
@@ -22,10 +28,83 @@ function InvalidateSize() {
   return null;
 }
 
+/** Zooms from the map's initial (already zoomed-out) framing up to the real
+ *  target once, when `active` first turns true. Reduced motion jumps straight
+ *  to the target instead of flying. */
+function EntranceFlyTo({
+  center,
+  zoom,
+  active,
+  reduce,
+}: {
+  center: [number, number];
+  zoom: number;
+  active: boolean;
+  reduce: boolean | null;
+}) {
+  const map = useMap();
+  const done = useRef(false);
+  useEffect(() => {
+    if (!active || done.current) return;
+    done.current = true;
+    if (reduce) {
+      map.setView(center, zoom, { animate: false });
+    } else {
+      map.flyTo(center, zoom, { duration: 1.1 });
+    }
+  }, [active, center, zoom, reduce, map]);
+  return null;
+}
+
+/** Toggles Leaflet's own interaction handlers post-mount — the tap-to-interact
+ *  gate. The map is constructed fully non-interactive (see the `MapContainer`
+ *  props below) so it never hijacks page scroll on mobile; tapping once
+ *  enables real pan/zoom. */
+function InteractionControl({ enabled }: { enabled: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    const handlers = [map.dragging, map.scrollWheelZoom, map.doubleClickZoom, map.touchZoom, map.keyboard];
+    handlers.forEach((h) => (enabled ? h.enable() : h.disable()));
+  }, [enabled, map]);
+  return null;
+}
+
+/** A live numeric reading, honestly "—" (never 0) when missing. */
+function Metric({ value }: { value: string | null }) {
+  if (value === null) {
+    return (
+      <span className="text-line" title="keine Daten" aria-label="keine Daten">
+        —
+      </span>
+    );
+  }
+  return <span className="tabular-nums">{value}</span>;
+}
+
+/** Counts up from 0 to `target` once `trigger` flips true (600ms, one-shot).
+ *  Reduced motion / no trigger yet just shows the target directly. */
+function useCountUp(target: number | null, trigger: boolean, reduce: boolean | null): number | null {
+  const [display, setDisplay] = useState<number | null>(reduce ? target : null);
+  useEffect(() => {
+    if (target == null) return;
+    if (reduce || !trigger) {
+      setDisplay(target);
+      return;
+    }
+    setDisplay(0);
+    const controls = animateValue(0, target, {
+      duration: 0.6,
+      ease: "easeOut",
+      onUpdate: (v) => setDisplay(Math.round(v)),
+    });
+    return () => controls.stop();
+  }, [target, trigger, reduce]);
+  return display;
+}
+
 /**
  * Spot map: the label-free CARTO Voyager basemap (same look as the big map),
- * tightly framed on the spot, non-interactive. A canvas overlay animates the
- * live conditions:
+ * tightly framed on the spot. A canvas overlay animates the live conditions:
  *
  *  • Wind — parallel particle streaks flowing toward where the wind blows
  *    (windDir + 180). Speed and streak length scale with wind strength.
@@ -34,7 +113,13 @@ function InvalidateSize() {
  *    swell period (spacing = phase-speed × period); chop breaks jagged, swell
  *    rolls smooth.
  *
- * Everything is data-driven; the animation pauses under prefers-reduced-motion.
+ * A glass card top-left shows the live reading (`live`) — separate from the
+ * windKts/windDir/waveDir/period/coast props below, which only drive the
+ * canvas animation and are untouched. The map itself starts non-interactive
+ * (so it never hijacks page scroll on mobile) and stays that way until
+ * tapped; scrolling it into view flies the zoom in, fades the streaks in,
+ * then drops the marker — all skipped in favour of the end state under
+ * prefers-reduced-motion.
  */
 export default function SpotFlowMap({
   coords,
@@ -48,6 +133,7 @@ export default function SpotFlowMap({
   mapCenter,
   aspect = "sm:aspect-[21/9]",
   rounded = true,
+  live = null,
 }: {
   coords: [number, number];
   windDir: number; // degrees wind comes FROM
@@ -66,12 +152,62 @@ export default function SpotFlowMap({
   aspect?: string;
   /** Off for the full-bleed page treatment, where the map runs edge to edge. */
   rounded?: boolean;
+  /** Live reading for the top-left conditions overlay. Omitted/null → no
+   *  overlay at all (never an empty card). */
+  live?: LiveConditionsRead | null;
 }) {
   // Effective framing: admin's saved view wins, else default (spot-centred).
   const effZoom = zoom ?? MAP_ZOOM;
   const effCenter: [number, number] = mapCenter ?? coords;
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const reduce = useReducedMotion();
+  const inView = useInView(wrapRef, { once: true, amount: 0.3 });
+
+  const [interactive, setInteractive] = useState(false);
+  const [streaksVisible, setStreaksVisible] = useState(false);
+  const [markerVisible, setMarkerVisible] = useState(false);
+  const [overlayVisible, setOverlayVisible] = useState(false);
+
+  // Staggered entrance once the map scrolls into view: EntranceFlyTo handles
+  // the zoom itself; this drives what comes after — streaks at 1100ms (when
+  // the fly finishes), the marker 400ms after that. The overlay's own 300ms
+  // reveal runs off the same trigger. Reduced motion collapses straight to
+  // the end state for all of it.
+  useEffect(() => {
+    if (!inView) return;
+    if (reduce) {
+      setStreaksVisible(true);
+      setMarkerVisible(true);
+      setOverlayVisible(true);
+      return;
+    }
+    const tStreaks = setTimeout(() => setStreaksVisible(true), 1100);
+    const tMarker = setTimeout(() => setMarkerVisible(true), 1100 + 400);
+    const tOverlay = setTimeout(() => setOverlayVisible(true), 300);
+    return () => {
+      clearTimeout(tStreaks);
+      clearTimeout(tMarker);
+      clearTimeout(tOverlay);
+    };
+  }, [inView, reduce]);
+
+  const initialZoom = reduce ? effZoom : Math.max(0, effZoom - 1.5);
+
+  const dropIcon = useMemo(
+    () =>
+      L.divIcon({
+        className: reduce ? "swd-flowmap-pin" : "swd-flowmap-pin swd-marker-drop",
+        html: `<svg width="26" height="34" viewBox="0 0 24 30" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 0C5.7 0 1 4.7 1 10.7 1 18.4 12 30 12 30s11-11.6 11-19.3C23 4.7 18.3 0 12 0Z"
+              fill="#E0823C" stroke="#ffffff" stroke-width="1.4"/>
+            <circle cx="12" cy="10.5" r="3.4" fill="#ffffff"/>
+          </svg>`,
+        iconSize: [26, 34],
+        iconAnchor: [13, 34],
+      }),
+    [reduce]
+  );
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -389,6 +525,9 @@ export default function SpotFlowMap({
     };
   }, [effCenter[0], effCenter[1], effZoom, windDir, windKts, waveDir, coast, period, waterType]);
 
+  const c = live?.current;
+  const windValue = useCountUp(typeof c?.wind === "number" ? Math.round(c.wind) : null, overlayVisible, reduce);
+
   return (
     <div
       ref={wrapRef}
@@ -396,21 +535,80 @@ export default function SpotFlowMap({
     >
       <MapContainer
         center={effCenter}
-        zoom={effZoom}
+        zoom={initialZoom}
         zoomSnap={0.5}
         zoomControl={false}
         scrollWheelZoom={false}
         dragging={false}
         doubleClickZoom={false}
+        touchZoom={false}
         keyboard={false}
         attributionControl={false}
         className="h-full w-full"
       >
         <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png" subdomains="abcd" />
         <InvalidateSize />
+        <EntranceFlyTo center={effCenter} zoom={effZoom} active={inView} reduce={reduce} />
+        <InteractionControl enabled={interactive} />
+        {markerVisible && <Marker position={coords} icon={dropIcon} />}
       </MapContainer>
 
-      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 z-[500] h-full w-full" />
+      <canvas
+        ref={canvasRef}
+        className={`pointer-events-none absolute inset-0 z-[500] h-full w-full transition-opacity duration-[400ms] ${
+          streaksVisible ? "opacity-100" : "opacity-0"
+        }`}
+      />
+
+      {live && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={overlayVisible ? { opacity: 1, y: 0 } : { opacity: 0, y: -8 }}
+          transition={{ duration: 0.35, ease: "easeOut" }}
+          className="glass-white pointer-events-none absolute left-4 top-4 z-[520] rounded-2xl px-4 py-3 text-navy shadow-pill backdrop-blur-xl"
+        >
+          <div className="flex items-baseline gap-2">
+            <span className="text-title font-semibold tabular-nums" style={{ color: windColor(windValue) }}>
+              {windValue ?? "—"}
+            </span>
+            <span className="text-caption text-muted">kts</span>
+            {typeof c?.dir === "number" && (
+              <span className="flex items-center gap-1">
+                <WindArrow dir={c.dir} size={16} animate className="text-navy/70" />
+                <span className="text-caption font-medium text-navy/70">{degToCompass(c.dir)}</span>
+              </span>
+            )}
+          </div>
+          <div className="mt-1 text-caption text-muted">
+            Böen <Metric value={typeof c?.gust === "number" ? String(Math.round(c.gust)) : null} /> kts
+          </div>
+          <div className="mt-1 flex items-center gap-2 text-caption text-muted">
+            <span>
+              <Metric value={typeof c?.swell === "number" ? c.swell.toFixed(1) : null} /> m
+            </span>
+            <span>
+              <Metric value={typeof c?.period === "number" ? String(Math.round(c.period)) : null} /> s
+            </span>
+            <span>
+              <Metric value={typeof c?.sst === "number" ? String(Math.round(c.sst)) : null} />° /{" "}
+              <Metric value={typeof c?.air === "number" ? String(Math.round(c.air)) : null} />°
+            </span>
+          </div>
+        </motion.div>
+      )}
+
+      {!interactive && (
+        <button
+          type="button"
+          onClick={() => setInteractive(true)}
+          aria-label="Karte zum Verschieben und Zoomen aktivieren"
+          className="absolute inset-0 z-[540] flex items-end justify-center pb-4 sm:items-center sm:pb-0"
+        >
+          <span className="rounded-full bg-navy/80 px-4 py-2 text-caption font-medium text-white shadow-pill backdrop-blur">
+            Antippen zum Verschieben &amp; Zoomen
+          </span>
+        </button>
+      )}
     </div>
   );
 }
