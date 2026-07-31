@@ -7,6 +7,7 @@ import { ErrorBanner, EmptyState } from "../components/AsyncStates";
 import * as api from "../lib/api";
 import { sportLabel } from "../lib/labels";
 import RegionTile from "../components/RegionTile";
+import Reveal from "../components/Reveal";
 
 const MONTHS = [
   "Januar", "Februar", "März", "April", "Mai", "Juni",
@@ -175,9 +176,9 @@ function SearchHits({ result }: { result: api.SearchResult }) {
         <section>
           <h2 className="mb-3 text-[15px] font-semibold text-ink">Regionen</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {result.regionen.map((r) => (
+            {result.regionen.map((r, i) => (
+              <Reveal key={r.id} delayMs={Math.min(i, 8) * 40}>
               <Link
-                key={r.id}
                 to={`/region/${r.slug}`}
                 className="group flex items-center justify-between gap-3 rounded-2xl border border-line bg-white p-4 shadow-card transition-shadow hover:shadow-float"
               >
@@ -194,6 +195,7 @@ function SearchHits({ result }: { result: api.SearchResult }) {
                   ›
                 </span>
               </Link>
+              </Reveal>
             ))}
           </div>
         </section>
@@ -206,9 +208,9 @@ function SearchHits({ result }: { result: api.SearchResult }) {
             <span className="text-[12px] text-muted">Score 0–100 · höher = besser</span>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {result.spots.map((s) => (
+            {result.spots.map((s, i) => (
+              <Reveal key={s.id} delayMs={Math.min(i, 10) * 35}>
               <Link
-                key={s.id}
                 to={`/spot/${s.id}`}
                 className="group flex items-start justify-between gap-3 rounded-2xl border border-line bg-white p-4 shadow-card transition-shadow hover:shadow-float"
               >
@@ -229,6 +231,7 @@ function SearchHits({ result }: { result: api.SearchResult }) {
                   </span>
                 )}
               </Link>
+              </Reveal>
             ))}
           </div>
         </section>

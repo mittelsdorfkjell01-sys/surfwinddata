@@ -18,9 +18,36 @@
     height: 100%;
   }
 
+  /* Smooth in-page scrolling (anchor jumps, scrollIntoView) — motion-safe. */
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+
   body {
     @apply font-sans text-ink antialiased;
     margin: 0;
+  }
+
+  /* Scroll-reveal: elements start slightly down + transparent and ease in when
+     the <Reveal> wrapper marks them visible. No transition under reduced-motion
+     (the wrapper shows them immediately there). */
+  .reveal {
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity 500ms ease-out, transform 500ms ease-out;
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
   }
 
   /* Uppercase field labels: WO? / WANN? */

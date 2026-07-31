@@ -4,6 +4,7 @@ import HeroImage from "../components/HeroImage";
 import SearchBar from "../components/SearchBar";
 import TopSpotsRow from "../components/TopSpotsRow";
 import SpotTile from "../components/SpotTile";
+import Reveal from "../components/Reveal";
 import Footer from "../components/Footer";
 import { useSpots } from "../lib/hooks";
 import { MapIcon } from "../lib/icons";
@@ -75,15 +76,19 @@ export default function Landing() {
           rounded sheet rises over the hero for a seamless transition. */}
       <section className="relative z-10 -mt-8 rounded-t-[2rem] bg-white">
         <div className="mx-auto max-w-[1300px] px-4 pb-20 pt-14 sm:px-10">
-          <h2 className="text-[22px] font-semibold text-ink">Alle Spots entdecken</h2>
-          <p className="mt-1 text-[15px] text-muted">
-            Stöbere durch die ganze Sammlung — Region, Wind- und Wellenspots.
-          </p>
+          <Reveal>
+            <h2 className="text-[22px] font-semibold text-ink">Alle Spots entdecken</h2>
+            <p className="mt-1 text-[15px] text-muted">
+              Stöbere durch die ganze Sammlung — Region, Wind- und Wellenspots.
+            </p>
+          </Reveal>
 
           {spots.length > 0 && (
             <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {spots.map((spot) => (
-                <SpotTile key={spot.id} spot={spot} />
+              {spots.map((spot, i) => (
+                <Reveal key={spot.id} delayMs={Math.min(i, 10) * 45}>
+                  <SpotTile spot={spot} />
+                </Reveal>
               ))}
             </div>
           )}
