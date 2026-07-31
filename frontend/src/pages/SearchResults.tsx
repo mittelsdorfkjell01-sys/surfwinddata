@@ -8,6 +8,7 @@ import * as api from "../lib/api";
 import { sportLabel } from "../lib/labels";
 import RegionTile from "../components/RegionTile";
 import Reveal from "../components/Reveal";
+import CountUp from "../components/CountUp";
 
 const MONTHS = [
   "Januar", "Februar", "März", "April", "Mai", "Juni",
@@ -227,7 +228,7 @@ function SearchHits({ result }: { result: api.SearchResult }) {
                     className="shrink-0 rounded-full bg-teal/10 px-2 py-0.5 text-[12px] font-semibold text-teal"
                     title="Eignungs-Score für deinen Zeitraum (0–100), höher ist besser"
                   >
-                    {Math.round(s.score * 100)}
+                    <CountUp to={Math.round(s.score * 100)} />
                   </span>
                 )}
               </Link>
@@ -320,7 +321,7 @@ function BestWeeksList({ data, place }: { data: api.BestWeeksResponse; place: st
                 className="w-24 shrink-0 text-right text-[13px] text-muted"
                 title="Anteil der Zeit mit fahrbaren Bedingungen in dieser Woche"
               >
-                {Math.round(w.score * 100)}% nutzbar
+                <CountUp to={Math.round(w.score * 100)} suffix="%" /> nutzbar
               </span>
             )}
           </li>

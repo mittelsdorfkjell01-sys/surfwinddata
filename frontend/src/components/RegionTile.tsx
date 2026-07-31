@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import SpotImage from "./SpotImage";
+import CountUp from "./CountUp";
 import { usableMediaUrl } from "../lib/api";
 
 // One-letter month ticks for the wind-months strip (Jan … Dez).
@@ -42,7 +43,7 @@ export default function RegionTile({
   return (
     <Link
       to={to}
-      className="group relative block h-[252px] w-full overflow-hidden rounded-3xl"
+      className="group relative block h-[252px] w-full overflow-hidden rounded-3xl transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:shadow-float"
     >
       <div className="absolute inset-0">
         <SpotImage
@@ -72,7 +73,9 @@ export default function RegionTile({
           <p className="min-w-0 truncate text-[15px] font-semibold">{name}</p>
           {pct != null && (
             <span className="shrink-0 text-right leading-tight">
-              <span className="block text-[15px] font-semibold">{pct}%</span>
+              <span className="block text-[15px] font-semibold">
+                <CountUp to={pct} suffix="%" />
+              </span>
               <span className="block text-[10px] text-white/80">Abdeckung</span>
             </span>
           )}
