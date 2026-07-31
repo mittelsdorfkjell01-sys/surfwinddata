@@ -3,9 +3,12 @@ import ReactDOM from "react-dom/client";
 import {
   createBrowserRouter,
   Navigate,
+  Outlet,
   RouterProvider,
+  useLocation,
   type RouteObject,
 } from "react-router-dom";
+import { motion, useReducedMotion } from "framer-motion";
 import "leaflet/dist/leaflet.css";
 import "./index.css";
 import Landing from "./pages/Landing";
@@ -32,8 +35,26 @@ import { PrefsProvider } from "./context/PrefsContext";
 // (surfwinddata.com) never imports ./adminRoutes, so none of the admin UI ships.
 // The admin build (kjellmittelsdorf.de, VITE_INCLUDE_ADMIN=true) pulls it in and
 // opens the dashboard at "/". See lib/target.ts.
+/** Soft page transition: a short opacity fade on every navigation. Opacity only
+ *  (no transform) so it never creates a containing block that would break the
+ *  content pages' `position: sticky` headers. */
+function RootLayout() {
+  const location = useLocation();
+  const reduce = useReducedMotion();
+  return (
+    <motion.div
+      key={location.pathname}
+      initial={reduce ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: reduce ? 0 : 0.2, ease: "easeOut" }}
+    >
+      <Outlet />
+    </motion.div>
+  );
+}
+
 async function bootstrap() {
-  const routes: RouteObject[] = [
+  const publicRoutes: RouteObject[] = [
     {
       path: "/",
       element: ADMIN_DEPLOY ? <Navigate to="/admin" replace /> : <Landing />,
@@ -59,6 +80,9 @@ async function bootstrap() {
     },
   ];
 
+  // Public routes render inside RootLayout (adds the soft page-fade transition).
+  const routes: RouteObject[] = [{ element: <RootLayout />, children: publicRoutes }];
+
   if (INCLUDE_ADMIN) {
     routes.push(...(await import("./adminRoutes")).default);
   }
@@ -68,7 +92,8 @@ async function bootstrap() {
   routes.push({ path: "*", element: <NotFound /> });
 
   // Every route gets a render-error fallback instead of a blank screen.
-  for (const r of routes) if (!r.errorElement) r.errorElement = <RouteError />;
+  for (const r of [...publicRoutes, ...routes])
+    if (!r.errorElement) r.errorElement = <RouteError />;
 
   const router = createBrowserRouter(routes);
   ReactDOM.createRoot(document.getElementById("root")!).render(

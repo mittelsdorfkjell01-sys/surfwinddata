@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import LandingHeader from "../components/LandingHeader";
+import StickyHeader from "../components/StickyHeader";
 import SearchBar from "../components/SearchBar";
 import Footer from "../components/Footer";
 import { ErrorBanner, EmptyState } from "../components/AsyncStates";
@@ -113,9 +113,9 @@ export default function SearchResults() {
 
   return (
     <div className="min-h-screen bg-white">
-      <LandingHeader />
+      <StickyHeader />
 
-      <main className="mx-auto max-w-[1120px] px-4 pb-24 pt-10 sm:px-8">
+      <main className="mx-auto max-w-[1120px] px-4 pb-24 pt-8 sm:px-8">
         <nav className="text-[13px] font-medium text-muted">
           <Link to="/" className="hover:underline">
             Übersicht
