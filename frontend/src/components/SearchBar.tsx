@@ -21,11 +21,13 @@ type Segment = "where" | "when";
  * panels span the full bar width and size to their content (dynamic height,
  * capped at 70vh). Fields never dim — the bar stays crisp above the scrim.
  */
-export default function SearchBar() {
+export default function SearchBar({ initialWhere }: { initialWhere?: string } = {}) {
   const navigate = useNavigate();
   const reduce = useReducedMotion();
   const [open, setOpen] = useState<Segment | null>(null);
-  const [val, setVal] = useState<SearchValue>(EMPTY_SEARCH);
+  const [val, setVal] = useState<SearchValue>(() =>
+    initialWhere ? { ...EMPTY_SEARCH, whereText: initialWhere } : EMPTY_SEARCH
+  );
   const barRef = useRef<HTMLDivElement>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import Header from "../components/Header";
+import LandingHeader from "../components/LandingHeader";
+import SearchBar from "../components/SearchBar";
 import Footer from "../components/Footer";
 import { ErrorBanner, EmptyState } from "../components/AsyncStates";
 import * as api from "../lib/api";
@@ -12,12 +13,12 @@ const MONTHS = [
   "Juli", "August", "September", "Oktober", "November", "Dezember",
 ];
 
-/** A skeleton list of result rows. */
+/** A skeleton grid of result cards. */
 function ResultSkeleton() {
   return (
-    <div className="space-y-3">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="h-14 animate-pulse rounded-xl bg-line" />
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="h-24 animate-pulse rounded-2xl bg-line" />
       ))}
     </div>
   );
@@ -28,6 +29,7 @@ function ResultSkeleton() {
  *  • place fixed + time fixed/free → GET /search (spots/regions).
  *  • place fixed (entity) + time open → GET /areas/best-weeks (best weeks here).
  *  • place open → GET /search/best-regions (best regions, for a month or season).
+ * A search bar sits on top so the query can be refined without going back.
  */
 export default function SearchResults() {
   const [params] = useSearchParams();
@@ -61,9 +63,6 @@ export default function SearchResults() {
 
     let run: Promise<unknown>;
     if (placeOpen) {
-      // WO offen → beste Reviere (für den Monat, sonst die Saison). Regionen-
-      // Stammdaten (Bild/Land) parallel laden und per id zuordnen, damit die
-      // Kacheln denselben Look wie der Rest der Seite bekommen.
       run = Promise.all([
         api.getBestRegions({ sport, month: month ? Number(month) : undefined }),
         api.getRegions(),
@@ -73,12 +72,10 @@ export default function SearchResults() {
         setRegionMeta(new Map(regions.map((x) => [x.id, x])));
       });
     } else if (placeEntity && timeOpen) {
-      // Ort fix + WANN offen → beste Wochen für diesen Ort
       run = api
         .getBestWeeks({ spot_id: spotId, region_id: regionId, sport })
         .then((r) => alive && setBestWeeks(r));
     } else {
-      // Ort + Zeit fix (oder Freitext) → Spot-/Regionen-Suche
       run = api
         .getSearch({ q, sport, week: week ? Number(week) : undefined })
         .then((r) => alive && setResult(r));
@@ -103,13 +100,22 @@ export default function SearchResults() {
       : "Beste Reviere für die Saison"
     : placeEntity && timeOpen
     ? `Beste Wochen für „${q}“`
-    : `Suche: „${q}“`;
+    : q
+    ? `Suchergebnisse für „${q}“`
+    : "Alle Spots & Reviere";
+
+  // Context chips describing the active search.
+  const chips: string[] = [];
+  if (sport) chips.push(sportLabel(sport));
+  if (monthName) chips.push(monthName);
+  else if (week) chips.push(`KW ${week}`);
 
   return (
     <div className="min-h-screen bg-white">
-      <Header />
-      <main className="mx-auto max-w-[1000px] px-4 pb-24 pt-12 sm:px-8">
-        <nav className="mb-4 text-[13px] font-medium text-muted">
+      <LandingHeader />
+
+      <main className="mx-auto max-w-[1120px] px-4 pb-24 pt-10 sm:px-8">
+        <nav className="text-[13px] font-medium text-muted">
           <Link to="/" className="hover:underline">
             Übersicht
           </Link>
@@ -117,15 +123,28 @@ export default function SearchResults() {
           <span className="text-ink">Suche</span>
         </nav>
 
-        <h1 className="text-[26px] font-semibold text-ink">{heading}</h1>
-        {sport && (
-          <p className="mt-1 text-[14px] text-muted">
-            Sportart: {sportLabel(sport)}
-            {week ? ` · KW ${week}` : ""}
-          </p>
-        )}
+        {/* Refine / new search right on the results page. */}
+        <div className="mt-5">
+          <SearchBar initialWhere={q} />
+        </div>
 
-        <div className="mt-8">
+        <div className="mt-10">
+          <h1 className="text-[26px] font-semibold text-ink">{heading}</h1>
+          {chips.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {chips.map((c) => (
+                <span
+                  key={c}
+                  className="rounded-full bg-band px-2.5 py-0.5 text-[12px] font-medium text-ink-soft"
+                >
+                  {c}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6">
           {loading && <ResultSkeleton />}
           {error && !loading && (
             <ErrorBanner message={error} onRetry={() => setRetry((n) => n + 1)} />
@@ -134,9 +153,7 @@ export default function SearchResults() {
           {!loading && !error && bestRegions && (
             <BestRegionsList data={bestRegions} monthName={monthName} meta={regionMeta} />
           )}
-          {!loading && !error && bestWeeks && (
-            <BestWeeksList data={bestWeeks} place={q} />
-          )}
+          {!loading && !error && bestWeeks && <BestWeeksList data={bestWeeks} place={q} />}
         </div>
       </main>
 
@@ -157,19 +174,28 @@ function SearchHits({ result }: { result: api.SearchResult }) {
       {result.regionen.length > 0 && (
         <section>
           <h2 className="mb-3 text-[15px] font-semibold text-ink">Regionen</h2>
-          <ul className="space-y-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {result.regionen.map((r) => (
-              <li key={r.id}>
-                <Link
-                  to={`/region/${r.slug}`}
-                  className="flex items-center justify-between rounded-xl bg-[#F1F5FA] px-4 py-3 hover:bg-teal/[0.06]"
+              <Link
+                key={r.id}
+                to={`/region/${r.slug}`}
+                className="group flex items-center justify-between gap-3 rounded-2xl border border-line bg-white p-4 shadow-card transition-shadow hover:shadow-float"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-[15px] font-semibold text-ink">
+                    {r.name}
+                  </span>
+                  <span className="text-[12px] text-muted">Region</span>
+                </span>
+                <span
+                  aria-hidden
+                  className="shrink-0 text-teal transition-transform group-hover:translate-x-0.5"
                 >
-                  <span className="font-medium text-ink">{r.name}</span>
-                  <span className="text-[13px] text-muted">Region ›</span>
-                </Link>
-              </li>
+                  ›
+                </span>
+              </Link>
             ))}
-          </ul>
+          </div>
         </section>
       )}
 
@@ -179,31 +205,32 @@ function SearchHits({ result }: { result: api.SearchResult }) {
             <h2 className="text-[15px] font-semibold text-ink">Spots</h2>
             <span className="text-[12px] text-muted">Score 0–100 · höher = besser</span>
           </div>
-          <ul className="space-y-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {result.spots.map((s) => (
-              <li key={s.id}>
-                <Link
-                  to={`/spot/${s.id}`}
-                  className="flex items-center justify-between gap-4 rounded-xl bg-[#F1F5FA] px-4 py-3 hover:bg-teal/[0.06]"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium text-ink">{s.name}</span>
-                    <span className="block truncate text-[12px] text-muted">
-                      {s.sports.map(sportLabel).join(", ")}
-                    </span>
+              <Link
+                key={s.id}
+                to={`/spot/${s.id}`}
+                className="group flex items-start justify-between gap-3 rounded-2xl border border-line bg-white p-4 shadow-card transition-shadow hover:shadow-float"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-[15px] font-semibold text-ink">
+                    {s.name}
                   </span>
-                  {typeof s.score === "number" && (
-                    <span
-                      className="shrink-0 text-[12px] text-muted"
-                      title="Eignungs-Score für deinen Zeitraum (0–100), höher ist besser"
-                    >
-                      Score {Math.round(s.score * 100)}
-                    </span>
-                  )}
-                </Link>
-              </li>
+                  <span className="mt-0.5 block truncate text-[12px] text-muted">
+                    {s.sports.map(sportLabel).join(", ")}
+                  </span>
+                </span>
+                {typeof s.score === "number" && (
+                  <span
+                    className="shrink-0 rounded-full bg-teal/10 px-2 py-0.5 text-[12px] font-semibold text-teal"
+                    title="Eignungs-Score für deinen Zeitraum (0–100), höher ist besser"
+                  >
+                    {Math.round(s.score * 100)}
+                  </span>
+                )}
+              </Link>
             ))}
-          </ul>
+          </div>
         </section>
       )}
     </div>
@@ -230,11 +257,10 @@ function BestRegionsList({
   return (
     <section>
       <p className="mb-5 text-[14px] text-muted">
-        Offene Achse <b>wo</b>: die besten Reviere{" "}
-        {monthName ? `im ${monthName}` : "über die Saison"} — nach Abdeckung
-        (Anteil der Spots mit fahrbaren Bedingungen).
+        Die besten Reviere {monthName ? `im ${monthName}` : "über die Saison"} — nach
+        Abdeckung (Anteil der Spots mit fahrbaren Bedingungen).
       </p>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {ranking.map((r, i) => {
           const m = r.id ? meta.get(r.id) : undefined;
           return (
@@ -260,13 +286,7 @@ function BestRegionsList({
   );
 }
 
-function BestWeeksList({
-  data,
-  place,
-}: {
-  data: api.BestWeeksResponse;
-  place: string;
-}) {
+function BestWeeksList({ data, place }: { data: api.BestWeeksResponse; place: string }) {
   const weeks = (data.weeks ?? []).filter((w) => (w.score ?? 0) > 0).slice(0, 12);
   if (weeks.length === 0) {
     return (
@@ -276,15 +296,14 @@ function BestWeeksList({
   const max = Math.max(...weeks.map((w) => w.score ?? 0), 0.01);
   return (
     <section>
-      <p className="mb-3 text-[14px] text-muted">
-        Offene Achse <b>wann</b>: die besten Wochen für {place || "diesen Ort"} —
-        nach nutzbaren Stunden.
+      <p className="mb-4 text-[14px] text-muted">
+        Die besten Wochen für {place || "diesen Ort"} — nach nutzbaren Stunden.
       </p>
       <ul className="space-y-2">
         {weeks.map((w) => (
           <li
             key={w.week}
-            className="flex items-center gap-4 rounded-xl bg-[#F1F5FA] px-4 py-3"
+            className="flex items-center gap-4 rounded-2xl border border-line bg-white px-4 py-3"
           >
             <span className="w-16 shrink-0 font-medium text-ink">KW {w.week}</span>
             <span className="h-2 flex-1 overflow-hidden rounded-full bg-ink/10">
