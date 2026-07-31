@@ -30,6 +30,17 @@
     margin: 0;
   }
 
+  /* Prevent iOS Safari from zooming the page when a small-font input is focused
+     (any font-size < 16px triggers it). Only on phones; desktop keeps the
+     designed control sizes. */
+  @media (max-width: 640px) {
+    input,
+    textarea,
+    select {
+      font-size: 16px;
+    }
+  }
+
   /* Scroll-reveal: elements start slightly down + transparent and ease in when
      the <Reveal> wrapper marks them visible. No transition under reduced-motion
      (the wrapper shows them immediately there). */
