@@ -7,8 +7,8 @@ import { useAuth } from "../context/AuthContext";
 const ACCOUNT_LINKS: { label: string; to: string }[] = [
   { label: "Profil", to: "/konto/profil" },
   { label: "Favoriten", to: "/konto/favoriten" },
-  { label: "Hinzugefügte Spots", to: "/konto/spots" },
-  { label: "Kontoeinstellungen", to: "/konto/einstellungen" },
+  { label: "Gespeicherte Spots", to: "/konto/spots" },
+  { label: "Einstellungen", to: "/konto/einstellungen" },
 ];
 const UTILITY: { label: string; to: string }[] = [
   { label: "Impressum", to: "/impressum" },

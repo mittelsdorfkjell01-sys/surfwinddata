@@ -28,8 +28,6 @@ export interface SearchValue {
   whereSel: WhereSelection | null;
   whereOpen: boolean; // explicitly "egal wo" / überall — the open place axis
   when: WhenValue;
-  which: string[]; // backend sport values: surf | kitesurf | windsurf | wing
-  disciplines: string[]; // freestyle | big_air | foil
 }
 
 export const EMPTY_SEARCH: SearchValue = {
@@ -37,8 +35,6 @@ export const EMPTY_SEARCH: SearchValue = {
   whereSel: null,
   whereOpen: false,
   when: null,
-  which: [],
-  disciplines: [],
 };
 
 /** Whether the place axis is left open ("egal wo" / no concrete place). */
@@ -102,9 +98,6 @@ export function buildSearchParams(v: SearchValue): URLSearchParams {
     }
   }
 
-  // /search takes a single sport → use the first selected discipline.
-  if (v.which.length) p.set("sport", v.which[0]);
-
   // --- time axis ---
   const week = weekFromWhen(v.when);
   if (week) p.set("week", String(week));
@@ -112,8 +105,6 @@ export function buildSearchParams(v: SearchValue): URLSearchParams {
   if (month) p.set("month", String(month));
 
   // Richer inputs, forwarded for future backend support (currently unread):
-  if (v.which.length > 1) p.set("sports", v.which.join(",")); // TODO backend
-  if (v.disciplines.length) p.set("disciplines", v.disciplines.join(",")); // TODO backend
   if (v.when?.mode === "range") {
     p.set("from", v.when.from); // TODO backend
     if (v.when.to) p.set("to", v.when.to); // TODO backend
