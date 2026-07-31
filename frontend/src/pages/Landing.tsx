@@ -26,7 +26,7 @@ export default function Landing() {
 
   return (
     <div className="relative bg-white">
-      <LandingHeader />
+      <LandingHeader sticky />
 
       {/* 1 — Hero screen (photo scoped to this section only). */}
       <section className="relative flex min-h-screen flex-col overflow-hidden">
