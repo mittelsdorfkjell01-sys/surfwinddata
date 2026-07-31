@@ -5,6 +5,7 @@ import L from "leaflet";
 import LandingHeader from "../components/LandingHeader";
 import SpotCard from "../components/SpotCard";
 import MapSpotCard from "../components/MapSpotCard";
+import Reveal from "../components/Reveal";
 import RegionSeason from "../components/RegionSeason";
 import SimilarRegions from "../components/SimilarRegions";
 import SortDropdown from "../components/SortDropdown";
@@ -248,8 +249,10 @@ export default function RegionDetail() {
             </div>
           ) : (
             <div className="mt-8 grid grid-cols-1 gap-x-7 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
-              {gridSpots.map((spot) => (
-                <SpotCard key={spot.id} spot={spot} variant="editorial" />
+              {gridSpots.map((spot, i) => (
+                <Reveal key={spot.id} delayMs={Math.min(i, 8) * 45}>
+                  <SpotCard spot={spot} variant="editorial" />
+                </Reveal>
               ))}
             </div>
           )}

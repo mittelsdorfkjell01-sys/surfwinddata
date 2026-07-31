@@ -63,6 +63,7 @@ export default function EditorialHero({
             src={image}
             alt={alt}
             focal={focal}
+            fadeIn
             className="h-full w-full object-cover"
           />
         </motion.div>

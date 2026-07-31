@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { heroManifest } from "../heroManifest";
 
 const MIME: Record<string, string> = {
@@ -21,6 +22,10 @@ function keyFromSrc(src: string): string {
  * the smallest file that still covers the display's CSS width × DPR — no
  * upscaling up to the largest generated width, and no oversized download on
  * mobile. Unknown/remote sources (e.g. picsum) render as a plain <img>.
+ *
+ * `fadeIn` blurs the photo up (fades from transparent once decoded) — used on the
+ * spot/region hero where a dark backdrop sits behind it. Off by default so the
+ * landing's LCP hero paints immediately.
  */
 export default function HeroImage({
   src,
@@ -28,15 +33,23 @@ export default function HeroImage({
   alt,
   className,
   focal,
+  fadeIn = false,
 }: {
   src: string;
   fallbackSrc?: string;
   alt: string;
   className?: string;
   focal?: { x: number; y: number } | null;
+  fadeIn?: boolean;
 }) {
   const entry = src.startsWith("/") ? heroManifest[keyFromSrc(src)] : undefined;
   const style = focal ? { objectPosition: `${focal.x}% ${focal.y}%` } : undefined;
+
+  const ref = useRef<HTMLImageElement>(null);
+  const [loaded, setLoaded] = useState(!fadeIn);
+  useEffect(() => {
+    if (fadeIn && ref.current?.complete) setLoaded(true);
+  }, [fadeIn, src]);
 
   const onError = (e: React.SyntheticEvent<HTMLImageElement>) => {
     if (fallbackSrc && e.currentTarget.src !== fallbackSrc) {
@@ -44,8 +57,20 @@ export default function HeroImage({
     }
   };
 
+  const imgClassName = fadeIn
+    ? `${className ?? ""} transition-opacity duration-700 ${loaded ? "opacity-100" : "opacity-0"}`
+    : className;
+  const shared = {
+    ref,
+    alt,
+    style,
+    onError,
+    onLoad: fadeIn ? () => setLoaded(true) : undefined,
+    className: imgClassName,
+  };
+
   if (!entry) {
-    return <img src={src} alt={alt} className={className} style={style} onError={onError} />;
+    return <img src={src} {...shared} />;
   }
 
   const key = keyFromSrc(src);
@@ -59,7 +84,7 @@ export default function HeroImage({
           srcSet={entry.widths.map((w) => `/${key}-${w}.${fmt} ${w}w`).join(", ")}
         />
       ))}
-      <img src={entry.fallback} alt={alt} className={className} style={style} onError={onError} />
+      <img src={entry.fallback} {...shared} />
     </picture>
   );
 }
