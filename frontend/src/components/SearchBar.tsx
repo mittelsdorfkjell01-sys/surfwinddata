@@ -265,7 +265,7 @@ export default function SearchBar({ initialWhere }: { initialWhere?: string } = 
                     initial={reduce ? false : { opacity: 0, x: open === "when" ? 18 : -18 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                    className="min-h-[200px]"
+                    className="h-[232px]"
                   >
                     {open === "where" && (
                       <SearchWhere
