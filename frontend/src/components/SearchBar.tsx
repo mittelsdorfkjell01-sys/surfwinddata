@@ -71,12 +71,6 @@ export default function SearchBar({ initialWhere }: { initialWhere?: string } = 
     close();
   };
 
-  // Open place axis ("unentschlossen").
-  const openWherePlace = () => {
-    setVal((v) => ({ ...v, whereOpen: true, whereSel: null, whereText: "unentschlossen" }));
-    close();
-  };
-
   return (
     <>
       <div ref={barRef} className="relative">
@@ -97,7 +91,7 @@ export default function SearchBar({ initialWhere }: { initialWhere?: string } = 
               placeholder="Region oder Spot suchen"
               aria-label="Region oder Spot suchen"
               aria-expanded={open === "where"}
-              className="w-full truncate border-0 bg-transparent text-[13px] text-ink outline-none ring-0 placeholder:text-muted focus:outline-none focus:ring-0"
+              className="search-plain w-full truncate border-0 bg-transparent text-[13px] text-ink outline-none ring-0 placeholder:text-muted focus:outline-none focus:ring-0"
             />
           </label>
 
@@ -175,19 +169,19 @@ export default function SearchBar({ initialWhere }: { initialWhere?: string } = 
                 }}
                 className="overflow-hidden rounded-3xl border border-line bg-white"
               >
-                <div data-lenis-prevent className="p-5">
+                <motion.div layout data-lenis-prevent className="p-5">
+                  {/* Airbnb-style switch: the panel stays open and only its
+                      content swaps when Wohin/Wann is clicked — the new section
+                      slides in from the side of its tab (left = Wohin, right =
+                      Wann); `layout` above eases the height change. */}
                   <motion.div
                     key={open}
-                    initial={reduce ? false : { opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    initial={reduce ? false : { opacity: 0, x: open === "when" ? 18 : -18 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                   >
                     {open === "where" && (
-                      <SearchWhere
-                        query={val.whereText}
-                        onPick={pickWhere}
-                        onOpen={openWherePlace}
-                      />
+                      <SearchWhere query={val.whereText} onPick={pickWhere} />
                     )}
                     {open === "when" && (
                       <SearchWhen
@@ -196,7 +190,7 @@ export default function SearchBar({ initialWhere }: { initialWhere?: string } = 
                       />
                     )}
                   </motion.div>
-                </div>
+                </motion.div>
               </motion.div>
             </>
           )}
