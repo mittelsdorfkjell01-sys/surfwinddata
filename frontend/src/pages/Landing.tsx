@@ -52,7 +52,7 @@ export default function Landing() {
         {/* Search — sits high in the hero so the (compact) dropdown always fits
             above the fold and never reaches into the white spots section. */}
         <div className="flex justify-center px-4 pb-72 sm:px-6 sm:pb-80">
-          <div className="relative z-[1200] w-full max-w-[760px]">
+          <div id="landing-search" className="relative z-[1200] w-full max-w-[760px]">
             <SearchBar />
           </div>
         </div>

@@ -25,7 +25,15 @@ export default function LandingHeader({
   const [solid, setSolid] = useState(false);
   useEffect(() => {
     if (!sticky) return;
-    const onScroll = () => setSolid(window.scrollY > window.innerHeight * 0.5);
+    // Solidify exactly when the search bar has scrolled up to meet the header —
+    // i.e. the wordmark bar "catches" the search bar. Falls back to half-a-
+    // viewport when the search bar isn't on the page (other hero pages).
+    const TRIGGER_Y = 84; // ≈ the header bar's bottom edge in viewport px
+    const onScroll = () => {
+      const search = document.getElementById("landing-search");
+      if (search) setSolid(search.getBoundingClientRect().top <= TRIGGER_Y);
+      else setSolid(window.scrollY > window.innerHeight * 0.5);
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll);
