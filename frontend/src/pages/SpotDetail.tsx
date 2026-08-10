@@ -15,6 +15,8 @@ import SpotCommentBox from "../components/SpotCommentBox";
 import CommentsOverlay from "../components/CommentsOverlay";
 import FavoriteButton from "../components/FavoriteButton";
 import Footer from "../components/Footer";
+import SimilarSpots from "../components/SimilarSpots";
+import SpotMetaGrid from "../components/SpotMetaGrid";
 import { EditorialHero, SectionBand } from "../components/editorial";
 import { ErrorBanner, EmptyState } from "../components/AsyncStates";
 import { ChevronDownIcon, CheckCircleIcon } from "../lib/icons";
@@ -136,16 +138,16 @@ export default function SpotDetail() {
       />
 
       <main>
-        {/* Clean hero image — the spot identity (name/region/score) now lives in
-            the Info column below, not in an overlay on the photo (Figma Frame_9). */}
-        <EditorialHero
-          image={spot.hero}
-          focal={spot.heroFocal}
-          alt={spot.name}
-          credit={spot.heroCredit}
-          license={spot.heroLicense}
-          sourceUrl={spot.heroSource}
-        />
+        {activeTab === "info" && (
+          <EditorialHero
+            image={spot.hero}
+            focal={spot.heroFocal}
+            alt={spot.name}
+            credit={spot.heroCredit}
+            license={spot.heroLicense}
+            sourceUrl={spot.heroSource}
+          />
+        )}
 
         {tabs.length > 0 && <SpotTabs tabs={tabs} />}
 
@@ -160,8 +162,8 @@ export default function SpotDetail() {
               exit="exit"
               transition={{ duration: reduceMotion ? 0 : 0.22, ease: "easeOut" }}
             >
-            {/* Text / Galerie-Kachel / Facilities+Kommentar — drei Spalten */}
-            <SectionBand tone="page" pad="md">
+            {/* Text / Galerie-Kachel / Meta+Kommentar — drei Spalten */}
+            <SectionBand tone="page" pad="md" maxWidth="narrow">
               <div className="grid gap-x-8 gap-y-10 lg:grid-cols-[5fr_6fr_5fr]">
                 <div>
                   {/* Spot identity: breadcrumb, name + community score inline
@@ -200,9 +202,14 @@ export default function SpotDetail() {
                     </div>
                   )}
 
+                  {/* Facilities as a compact icon row in the identity block */}
+                  <div className="mt-6">
+                    <Facilities items={facilities} variant="icons" />
+                  </div>
+
                   {/* The real spot description (editorial.description from the DB);
                       falls back to a gentle note when a spot has none yet. */}
-                  <p className="mt-8 max-w-[62ch] text-body text-ink-soft">
+                  <p className="mt-8 max-w-[62ch] text-lede text-ink-soft">
                     {spot.description || "Für diesen Spot gibt es noch keine Beschreibung."}
                   </p>
 
@@ -220,7 +227,7 @@ export default function SpotDetail() {
                 </div>
 
                 <div className="flex flex-col gap-6">
-                  <Facilities items={facilities} variant="list" />
+                  <SpotMetaGrid spot={spot} />
                   <SpotCommentBox
                     spotId={id}
                     comment={featuredPost}
@@ -231,14 +238,17 @@ export default function SpotDetail() {
                 </div>
               </div>
 
-              {/* Lage: sits directly under the columns — same 32px gap the
-                  gallery has to its left/right columns (gap-x-8), not a whole
-                  new section's padding. */}
+              {/* Lage: sits directly under the columns */}
               {spot.coords && (
-                <div className="mt-8">
+                <div className="mt-12">
                   <LocatorMap coords={spot.coords} />
                 </div>
               )}
+
+              {/* Similar spots — reactive to region + wind profile */}
+              <div className="mt-16">
+                <SimilarSpots spot={spot} />
+              </div>
             </SectionBand>
 
             <PhotoGalleryOverlay

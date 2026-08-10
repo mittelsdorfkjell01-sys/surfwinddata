@@ -53,7 +53,7 @@ export default function EditorialHero({
   const titleY = useTransform(scrollY, [0, 400], [0, -40]);
 
   return (
-    <section className="hero-h relative w-full overflow-hidden bg-ink">
+    <section className="relative w-full overflow-hidden bg-ink aspect-video sm:aspect-[21/9]">
       {image ? (
         <motion.div
           className="absolute inset-x-0"
